@@ -16,25 +16,25 @@ PFD's four altitudes — **system → subsystem → workflow → use case** — 
 Each **use case is one slice** (one `Request`/`Response`, one `execute(Request)` method), the leaf of
 the tree. 23 single-use-case slices:
 
-```
-org.pragmatica.example.ticketing/                 (system)
-  shared/ · shared/event/                          (value objects · facts + pub-sub qualifiers)
-  booking/                                         (subsystem — BookingStore)
-    purchase/      BuyTicket          cancellation/  CancelTicket
-    hold/          AcquireHold · CheckHold · SweepHolds
-  pricing/                                         (subsystem — PricingStore)
-    schedule/      SetPrice · AdjustPrice          quoting/  QuotePrice
-  eventmanagement/                                 (subsystem — EventStore)
-    lifecycle/     CreateEvent · OpenEvent · CancelEvent
-    capacity/      AddSeat · BlockSeat · ReleaseSeat
-    sales/         SaleStatus
-    convergence/   MarkSeatSold · MarkSeatReleased          ← SeatSold/SeatReleased consumers
-  availability/                                    (read subsystem — per-use-case @PgSql interfaces)
-    query/         SeatStatus · SoldCount
-    projection/    ProjectSeatSold · ProjectSeatReleased    ← consumers
-  quote/                                           (read subsystem — per-use-case @PgSql interfaces)
-    query/         QuoteForCustomer                projection/  ProjectPrice   ← PriceChanged consumer
-```
+| Subsystem (persistence) | Workflow | Use-case slices |
+|---|---|---|
+| **booking** — `BookingStore` | `purchase/` | `BuyTicket` |
+| | `cancellation/` | `CancelTicket` |
+| | `hold/` | `AcquireHold`, `CheckHold`, `SweepHolds` |
+| **pricing** — `PricingStore` | `schedule/` | `SetPrice`, `AdjustPrice` |
+| | `quoting/` | `QuotePrice` |
+| **eventmanagement** — `EventStore` | `lifecycle/` | `CreateEvent`, `OpenEvent`, `CancelEvent` |
+| | `capacity/` | `AddSeat`, `BlockSeat`, `ReleaseSeat` |
+| | `sales/` | `SaleStatus` |
+| | `convergence/` | `MarkSeatSold`, `MarkSeatReleased` *(SeatSold/SeatReleased consumers)* |
+| **availability** — per-use-case `@PgSql` | `query/` | `SeatStatus`, `SoldCount` |
+| | `projection/` | `ProjectSeatSold`, `ProjectSeatReleased` *(consumers)* |
+| **quote** — per-use-case `@PgSql` | `query/` | `QuoteForCustomer` |
+| | `projection/` | `ProjectPrice` *(PriceChanged consumer)* |
+
+Above the subsystems, `shared/` holds the cross-cutting value objects (`Money`, `Percent`,
+`SeatState`, the id types, `SeatLocation`) and `shared/event/` the pub-sub facts (`SeatSold`,
+`SeatReleased`, `PriceChanged`).
 
 Every use-case slice is an interface with nested `Request`/`Response` records, a sealed `…Error
 extends Cause`, and one method `Promise<Response> execute(Request)`. The write subsystems share one
