@@ -5,7 +5,12 @@ A complete, runnable realization of the **event-ticketing example** threaded thr
 parse-don't-validate, sealed typed failures) on the **Aether** unified runtime. This is the
 posterchild: the book designs the processes; this repo runs them.
 
-> Built and tested on Pragmatica Lite / Aether / JBCT **1.0.0-rc2**, Java 25.
+> **⚠️ Status — depends on an unreleased toolchain.** This project builds and passes its full test
+> suite on **Pragmatica Lite / Aether / JBCT `1.0.0-rc2`** (Java 25) — but **rc2 is not yet released**:
+> its artifacts are not on Maven Central. It compiles locally against an `~/.m2` install of rc2; a
+> fresh clone **cannot resolve the dependencies yet**, so for now read it as a reference. It becomes
+> buildable as-is once rc2 is published.
+>
 > Design rationale and the full process catalog live in [`docs/DESIGN.md`](docs/DESIGN.md).
 
 ---
@@ -72,11 +77,11 @@ conflict is impossible by the shape of the statement.
 
 ## Build & test
 
-> **Prerequisite:** requires Pragmatica Lite / Aether / JBCT **`1.0.0-rc2`** in your local Maven
-> repository, including the `slice-processor` codegen fixes merged via
-> [pragmaticalabs/pragmatica#364](https://github.com/pragmaticalabs/pragmatica/pull/364). Until the
-> official `1.0.0-rc2` artifacts are published, build the processor from the `release-1.0.0-rc2`
-> branch (`mvn -pl jbct/slice-processor install -DskipTests`).
+> **Prerequisite (see the Status note above):** needs the **whole `1.0.0-rc2` line** — `core`,
+> `aether` (`slice-api`/`pg-codegen`/…), and the `slice-processor` (with the codegen fixes merged via
+> [pragmaticalabs/pragmatica#364](https://github.com/pragmaticalabs/pragmatica/pull/364)) — in your
+> local `~/.m2`. None of these are on Maven Central yet, so until rc2 is published you must build them
+> from a `release-1.0.0-rc2` checkout (`mvn install`) before this project will resolve.
 
 ```bash
 mvn clean install         # compiles (slice-processor + pg-codegen), runs 125 unit tests, generates target/blueprint.toml (23 slices)
