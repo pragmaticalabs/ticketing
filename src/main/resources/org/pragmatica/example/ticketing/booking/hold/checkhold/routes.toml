@@ -1,0 +1,9 @@
+prefix = "/api/v1/booking/holds"
+
+[routes]
+execute = "GET /{seat}"
+
+[errors]
+default = 500
+HTTP_400 = ["*Blank*", "*Malformed*"]
+HTTP_503 = ["*StoreUnavailable*"]

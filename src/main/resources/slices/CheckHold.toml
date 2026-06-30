@@ -1,0 +1,3 @@
+# Booking / hold / check-hold use case: report a seat hold's decay state (FRESH/STALE/EXPIRED/NONE).
+[blueprint]
+instances = 3

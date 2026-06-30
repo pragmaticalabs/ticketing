@@ -1,0 +1,3 @@
+# Event-management / lifecycle / cancel-event use case.
+[blueprint]
+instances = 3

@@ -1,0 +1,10 @@
+prefix = "/api/v1/seats/add"
+
+[routes]
+execute = "POST /"
+
+[errors]
+default = 500
+HTTP_400 = ["*Blank*", "*Malformed*", "*NonPositiveNumber*", "*Unknown*"]
+HTTP_404 = ["*EventNotFound*"]
+HTTP_503 = ["*StoreUnavailable*"]

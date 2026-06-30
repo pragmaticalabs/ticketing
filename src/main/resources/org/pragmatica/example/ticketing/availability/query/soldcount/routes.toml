@@ -1,0 +1,9 @@
+prefix = "/api/v1/availability/sold"
+
+[routes]
+execute = "GET /{event}"
+
+[errors]
+default = 500
+HTTP_400 = ["*Blank*", "*Malformed*"]
+HTTP_503 = ["*StoreUnavailable*"]

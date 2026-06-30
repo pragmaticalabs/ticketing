@@ -1,0 +1,11 @@
+-- Initial database schema
+-- Add your CREATE TABLE statements here.
+-- The annotation processor validates queries against this schema at compile time.
+--
+-- Example:
+-- CREATE TABLE IF NOT EXISTS users (
+--     id        BIGSERIAL PRIMARY KEY,
+--     name      TEXT      NOT NULL,
+--     email     TEXT      NOT NULL UNIQUE,
+--     created   TIMESTAMPTZ NOT NULL DEFAULT now()
+-- );

@@ -1,0 +1,3 @@
+# Booking / cancellation / cancel-ticket use case: BER cancel + refund + seat release.
+[blueprint]
+instances = 3

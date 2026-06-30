@@ -1,0 +1,3 @@
+# Booking / hold / acquire-hold use case: design-out seat claim with a decaying 15-minute hold.
+[blueprint]
+instances = 3

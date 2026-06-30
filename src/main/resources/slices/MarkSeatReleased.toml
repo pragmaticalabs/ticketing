@@ -1,0 +1,3 @@
+# Event-management / convergence / mark-seat-released consumer (no HTTP route).
+[blueprint]
+instances = 3

@@ -1,0 +1,2 @@
+-- Database schema for HelloWorld
+-- Run: ./start-postgres.sh

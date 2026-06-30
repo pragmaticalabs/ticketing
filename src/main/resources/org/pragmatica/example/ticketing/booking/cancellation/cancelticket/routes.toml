@@ -1,0 +1,12 @@
+prefix = "/api/v1/booking/cancel"
+
+[routes]
+execute = "POST /"
+
+[errors]
+default = 500
+HTTP_400 = ["*Blank*", "*Malformed*"]
+HTTP_403 = ["*NotOwner*"]
+HTTP_404 = ["*BookingNotFound*"]
+HTTP_409 = ["*AlreadyCancelled*"]
+HTTP_503 = ["*StoreUnavailable*", "*RefundFailed*"]

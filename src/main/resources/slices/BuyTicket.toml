@@ -1,0 +1,4 @@
+# Booking / purchase / buy-ticket use case: the BER-saga centerpiece (reserve -> authorize ->
+# confirm with compensation). A write core -- a modest instance count.
+[blueprint]
+instances = 3

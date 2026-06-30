@@ -1,0 +1,12 @@
+prefix = "/api/v1/booking/buy"
+
+[routes]
+execute = "POST /"
+
+[errors]
+default = 500
+HTTP_400 = ["*Blank*", "*Malformed*", "*Unknown*"]
+HTTP_402 = ["*PaymentDeclined*"]
+HTTP_409 = ["*SeatUnavailable*", "*EventNotSelling*"]
+HTTP_422 = ["*CustomerIneligible*"]
+HTTP_503 = ["*StoreUnavailable*", "*PaymentProviderUnavailable*", "*PriceUnavailable*"]

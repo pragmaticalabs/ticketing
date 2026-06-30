@@ -1,0 +1,3 @@
+# Availability / projection / project-seat-sold consumer.
+[blueprint]
+instances = 3

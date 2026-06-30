@@ -1,0 +1,9 @@
+prefix = "/api/v1/pricing/set"
+
+[routes]
+execute = "POST /"
+
+[errors]
+default = 500
+HTTP_400 = ["*Blank*", "*Malformed*", "*Unknown*", "*NegativeAmount*"]
+HTTP_503 = ["*StoreUnavailable*"]

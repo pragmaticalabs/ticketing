@@ -1,0 +1,10 @@
+[project]
+basePackage = "org.pragmatica.example.ticketing"
+
+[format]
+maxLineLength = 120
+indentSize = 4
+
+[lint]
+failOnWarning = false
+# excludePackages = ["some.generated.**"]

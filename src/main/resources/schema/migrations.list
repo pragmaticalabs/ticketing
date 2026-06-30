@@ -1,0 +1,6 @@
+V001__initial.sql
+V002__eventmanagement.sql
+V003__pricing.sql
+V004__booking.sql
+V005__availability.sql
+V006__quote.sql

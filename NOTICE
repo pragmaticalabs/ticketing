@@ -1,0 +1,7 @@
+Ticketing Platform — PFD/JBCT/Aether reference implementation
+Copyright 2026 Pragmatica Labs
+
+This product is licensed under the Apache License, Version 2.0 (see the LICENSE file).
+
+It is built on the Pragmatica Lite / Aether / JBCT runtime and toolchain
+(https://github.com/pragmaticalabs), which carry their own respective licenses.

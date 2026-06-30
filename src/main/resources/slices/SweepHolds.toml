@@ -1,0 +1,3 @@
+# Booking / hold / sweep-holds use case: operator/heartbeat-triggered expiry of stale holds.
+[blueprint]
+instances = 3

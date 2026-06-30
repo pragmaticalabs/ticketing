@@ -1,0 +1,16 @@
+# Build output
+target/
+*.class
+*.jar
+*.log
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Local coding-agent config (not part of the published example)
+.claude/
+
+# Internal session handover notes (kept locally, not published)
+HANDOVER-*.md

@@ -1,0 +1,11 @@
+prefix = "/api/v1/events/open"
+
+[routes]
+execute = "POST /{event}"
+
+[errors]
+default = 500
+HTTP_400 = ["*Blank*", "*Malformed*"]
+HTTP_404 = ["*EventNotFound*"]
+HTTP_409 = ["*AlreadyOpen*"]
+HTTP_503 = ["*StoreUnavailable*"]

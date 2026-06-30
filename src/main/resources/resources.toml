@@ -1,0 +1,56 @@
+# Aether resource declarations. Every @ResourceQualifier config section a slice references must
+# appear here; the blueprint generator validates this at build time. (HTTP payment gateway,
+# notification, and scheduling sections are added with the booking slice that uses them.)
+
+# --- Persistence (@PgSql -> config "database") ---
+[database]
+type = "POSTGRESQL"
+name = "ticketing"
+host = "localhost"
+port = 5432
+database = "forge"
+username = "postgres"
+password = "postgres"
+async_url = "postgresql://postgres:postgres@localhost:5432/forge"
+
+[database.pool_config]
+min_connections = 4
+max_connections = 20
+idle_timeout = "10m"
+connection_timeout = "5s"
+max_lifetime = "30m"
+leak_detection_timeout = "0s"
+io_threads = 0
+
+# --- Cross-slice fact topics (pub-sub) ---
+[seat-sold]
+topic_name = "seat-sold"
+
+[seat-released]
+topic_name = "seat-released"
+
+[price-changed]
+topic_name = "price-changed"
+
+# --- External payment gateway (@Http -> config "http"). Booking authorizes/voids/refunds here.
+#     For local smoke testing, point this at a stub gateway (see scripts/stub-gateway). ---
+[http]
+base_url = "http://localhost:9100"
+timeout_ms = 5000
+
+# --- Email/SMS notifications (@Notify -> config "notification"). FER best-effort confirmations.
+#     Local smoke testing uses a MailHog/Mailpit SMTP sink on :1025. ---
+[notification]
+backend = "smtp"
+
+[notification.smtp]
+host = "localhost"
+port = 1025
+tls_mode = "NONE"
+username = ""
+password = ""
+pool_size = 2
+connect_timeout = "5s"
+command_timeout = "10s"
+helo_hostname = "ticketing.example"
+

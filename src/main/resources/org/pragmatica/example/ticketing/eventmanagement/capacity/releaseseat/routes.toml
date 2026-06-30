@@ -1,0 +1,10 @@
+prefix = "/api/v1/seats/release"
+
+[routes]
+execute = "POST /{seat}"
+
+[errors]
+default = 500
+HTTP_400 = ["*Blank*", "*Malformed*"]
+HTTP_409 = ["*SeatNotBlocked*"]
+HTTP_503 = ["*StoreUnavailable*"]

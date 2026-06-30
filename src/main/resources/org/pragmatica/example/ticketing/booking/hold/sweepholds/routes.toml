@@ -1,0 +1,8 @@
+prefix = "/api/v1/booking/holds/sweep"
+
+[routes]
+execute = "POST /"
+
+[errors]
+default = 500
+HTTP_503 = ["*StoreUnavailable*"]
