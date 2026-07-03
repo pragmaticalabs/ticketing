@@ -4,6 +4,10 @@ target/
 *.jar
 *.log
 
+# .NET build output (fsharp/ rendition)
+bin/
+obj/
+
 # IDE
 .idea/
 *.iml

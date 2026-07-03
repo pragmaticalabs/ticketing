@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <RootNamespace>Ticketing</RootNamespace>
+        <WarningsAsErrors>true</WarningsAsErrors>
+    </PropertyGroup>
+
+    <!-- F# compile order is explicit and meaningful: it IS the PFD telescope, read bottom-up.
+         Runtime stand-ins -> shared vocabulary -> write subsystems -> read subsystems.
+         A slice can only reference what compiles before it, so the dependency direction of the
+         design (booking reads pricing + eventmanagement synchronously; reads hang off facts)
+         is enforced by the compiler instead of by convention. -->
+    <ItemGroup>
+        <Compile Include="src/Pragmatica.fs" />
+        <Compile Include="src/Aether.fs" />
+        <Compile Include="src/Ticketing/Shared/Ids.fs" />
+        <Compile Include="src/Ticketing/Shared/Percent.fs" />
+        <Compile Include="src/Ticketing/Shared/Money.fs" />
+        <Compile Include="src/Ticketing/Shared/PriceTier.fs" />
+        <Compile Include="src/Ticketing/Shared/SeatState.fs" />
+        <Compile Include="src/Ticketing/Shared/SeatLocation.fs" />
+        <Compile Include="src/Ticketing/Shared/Events.fs" />
+        <Compile Include="src/Ticketing/EventManagement/EventStore.fs" />
+        <Compile Include="src/Ticketing/EventManagement/Lifecycle/CreateEvent.fs" />
+        <Compile Include="src/Ticketing/EventManagement/Lifecycle/OpenEvent.fs" />
+        <Compile Include="src/Ticketing/EventManagement/Lifecycle/CancelEvent.fs" />
+        <Compile Include="src/Ticketing/EventManagement/Capacity/AddSeat.fs" />
+        <Compile Include="src/Ticketing/EventManagement/Capacity/BlockSeat.fs" />
+        <Compile Include="src/Ticketing/EventManagement/Capacity/ReleaseSeat.fs" />
+        <Compile Include="src/Ticketing/EventManagement/Convergence/MarkSeatSold.fs" />
+        <Compile Include="src/Ticketing/EventManagement/Convergence/MarkSeatReleased.fs" />
+        <Compile Include="src/Ticketing/EventManagement/Sales/SaleStatus.fs" />
+        <Compile Include="src/Ticketing/Pricing/PricingStore.fs" />
+        <Compile Include="src/Ticketing/Pricing/Schedule/SetPrice.fs" />
+        <Compile Include="src/Ticketing/Pricing/Schedule/AdjustPrice.fs" />
+        <Compile Include="src/Ticketing/Pricing/Quoting/QuotePrice.fs" />
+        <Compile Include="src/Ticketing/Booking/BookingStore.fs" />
+        <Compile Include="src/Ticketing/Booking/Hold/AcquireHold.fs" />
+        <Compile Include="src/Ticketing/Booking/Hold/CheckHold.fs" />
+        <Compile Include="src/Ticketing/Booking/Hold/SweepHolds.fs" />
+        <Compile Include="src/Ticketing/Booking/Purchase/BuyTicket.fs" />
+        <Compile Include="src/Ticketing/Booking/Cancellation/CancelTicket.fs" />
+        <Compile Include="src/Ticketing/Availability/Projection/SeatProjectionStore.fs" />
+        <Compile Include="src/Ticketing/Availability/Projection/ProjectSeatSold.fs" />
+        <Compile Include="src/Ticketing/Availability/Projection/ProjectSeatReleased.fs" />
+        <Compile Include="src/Ticketing/Availability/Query/SeatStatus.fs" />
+        <Compile Include="src/Ticketing/Availability/Query/SoldCount.fs" />
+        <Compile Include="src/Ticketing/Quote/Projection/ProjectPrice.fs" />
+        <Compile Include="src/Ticketing/Quote/Query/QuoteForCustomer.fs" />
+    </ItemGroup>
+
+</Project>
