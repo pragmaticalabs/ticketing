@@ -1,8 +1,8 @@
 # Ticketing Platform — a PFD → JBCT → Aether reference
 
 A complete, runnable realization of the **event-ticketing example** threaded through the
-*Process-First Design* book, implemented with **JBCT** (functional Java: `Result`/`Option`/`Promise`,
-parse-don't-validate, sealed typed failures) on the **Aether** unified runtime. This is the
+[*Process-First Design*](https://leanpub.com/process-first-design) book, implemented with **[JBCT](https://pragmatica.dev/)** (functional Java: `Result`/`Option`/`Promise`,
+parse-don't-validate, sealed typed failures; see the [JBCT book](https://leanpub.com/jbct-book)) on the **[Aether](https://github.com/pragmaticalabs/pragmatica/tree/main/aether)** unified runtime. This is the
 posterchild: the book designs the processes; this repo runs them.
 
 > **⚠️ Status — depends on an unreleased toolchain.** This project builds and passes its full test
