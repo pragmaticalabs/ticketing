@@ -303,6 +303,13 @@ Also new in rc2, not on the list: `RateGuard` (injectable backpressure resource 
 `ResourceCapacityExhausted`), aspect-level observability config surface, `DeferredSliceInvokerFacade`,
 stream `TierAwareRetention`, header-mode API versioning (#198), `produces`/`consumes` media types (#339).
 
+**Adoption findings (this repo, 2026-07-17):** (a) `@ResourceQualifier` is `@Target(ANNOTATION_TYPE)`
+only — a `Scheduled` method needs a custom qualifier annotation (we added `@SweepSchedule`), same
+pattern as the subscription qualifiers. (b) Typed `Topic<T>` constants resolve fine in the
+slice-processor, but `jbct-maven-plugin generate-blueprint` still validates one `resources.toml`
+section per *resolved* topic name — the kebab-case sections must stay alongside the constants.
+Wish: teach blueprint validation the typed form so the redundant sections can go.
+
 ---
 
 ## Addendum (2026-07-17) — rc2 release completeness
