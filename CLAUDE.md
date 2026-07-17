@@ -282,20 +282,23 @@ AETHER CONTEXT (you have no built-in Aether knowledge — follow exactly):
 - Never hand-write codecs or SQL row mappers; never throw business exceptions; resources inject via
   the factory's parameters.
 - `jbct-coder` must be briefed on Aether every time (§8).
-- **rc1 slice-toolchain gotchas (hard-won — see `docs/DESIGN.md` §8–§10 for the full list + the live
-  posterchild that exercises them):** pg-codegen needs a `src/main/resources/schema/migrations.list`
-  manifest (one filename per line) or it silently skips migrations whose name isn't in its hardcoded
-  probe list; `@Query` accepts **text blocks on released rc2** (the rc1 mis-emit is fixed; this repo
-  uses them) but still avoid data-modifying
-  CTEs (use single-statement `ON CONFLICT`/`RETURNING` design-out); **every slice method takes exactly
-  one parameter** (a request record — route gen crashes on 2+); `@Notify` needs the separate
-  `org.pragmatica-lite.aether:resource-notification` provided dep; a slice factory's *transitive*
-  dependencies cap at 15 — which keeps **synchronous slice injection** viable for cross-subsystem
-  **reads** (e.g. `BuyTicket` injects `QuotePrice` + `SaleStatus` and calls them directly), while
-  cross-subsystem **facts** propagate via pub-sub (`SeatSold`/`SeatReleased`/`PriceChanged`); no `@Heartbeat`
-  in rc1; a `resources.toml` (not just `aether.toml`) must declare every `@ResourceQualifier` config
-  section. The slice-processor route-import-collision bug is fixed in the **released rc2
-  slice-processor** on Maven Central (merged via PR #364).
+- **rc1→rc2 slice-toolchain gotchas (hard-won — `docs/DESIGN.md` §8–§10 has the full list; rc2
+  statuses below are source-verified against the released jars, marked ⧗ where this repo hasn't
+  exercised the change yet):** `migrations.list` — rc2 auto-discovers `V*__*.sql` from the schema
+  dir, manifest now advisory ⧗ (we still ship one; harmless); `@Query` accepts **text blocks**
+  (rc1 mis-emit fixed; this repo uses them) but data-modifying CTEs stay unsupported — now a clear
+  compile error instead of silent mis-validation; **one-parameter slice methods** — rc2 auto-wraps
+  multi-param methods in a generated `<Method>Request` ⧗, but one request record stays the JBCT
+  idiom; the **15-transitive-dep `Promise.all` cap is gone** (rc2 auto-batches, fail-fast preserved) ⧗
+  — the one-slice-per-use-case split + pub-sub facts (`SeatSold`/`SeatReleased`/`PriceChanged`)
+  remain by design, not by cap; `@Notify` still needs the separate
+  `org.pragmatica-lite.aether:resource-notification` provided dep (NOT published to Central — see
+  Toolchain); still no `@Heartbeat`, but rc2 ships a real `Scheduled` (zero-param `Promise<Unit>`,
+  interval/cron, KV-tracked) ⧗ — candidate for `SweepHolds`; a `resources.toml` must still declare
+  every `@ResourceQualifier` config section (typed `Topic<T>` reduces the topic part). New rc2
+  opt-in worth enabling: `[errors] strict = true` makes unmapped `Cause`→HTTP a build failure ⧗.
+  Both slice-processor codegen bugs (route-import collision + codec FQN, PR #364) are fixed in the
+  released rc2.
 - The real product lives in `org.pragmatica.example.ticketing`, structured as the **PFD telescope**
   (system→subsystem→workflow→use case as packages): **23 single-use-case slices** (subsystems booking,
   pricing, eventmanagement, availability, quote), each one nested `Request`/`Response` + an

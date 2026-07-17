@@ -276,6 +276,35 @@ enum; missing/ambiguous/type-mismatched `PgRepr` is a compile error; a non-parsi
 
 ---
 
+## Addendum (2026-07-17) — what the released rc2 actually addressed
+
+Source-level audit of the published rc2 jars/sources (+ `v1.0.0-rc2` changelog). "Landed" = verified
+in the released sources; items marked *(not yet exercised here)* haven't been driven by this repo's
+build/tests yet.
+
+| # | Item | rc2 status |
+|---|------|-----------|
+| 1 | Error→HTTP totality | **Landed** — `ErrorMappingValidator` (totality + dead-pattern/reference); unmapped `Cause` fails the build only under `[errors] strict = true`, warns by default *(not yet enabled here)* |
+| 2 | Pub-sub honesty | **Partial** — per-consumer-group `ErrorStrategy{RETRY,SKIP,STALL}` + `dead-letter` stream + `max-retries` in stream config; runtime dispatch not verifiable from published sources |
+| 3 | Auto-discover migrations | **Landed** — `SchemaLoader` globs `V*__*.sql` from the directory; `migrations.list` now advisory (warning on drift; manifest only needed for jar-packaged schemas) |
+| 4 | VO↔column mapping | **Landed** — `ValueMapping<T,P>` (absorbed the `PgRepr` proposal, #397): VO convention `static ValueMapping<Vo,P> valueMapping()`, drives row decode AND `:param` binding, plus HTTP path/query binding |
+| 5 | `aether verify` | **Can't tell** — no verify/validate surface found in the published cli pom; needs a runtime check |
+| 6 | `@HttpStatus` | Not landed — error→status still routes.toml pattern-globs |
+| 7 | Config scaffolding | Not landed — but typed `Topic<T>` (#396) removes much of the manual `resources.toml` topic wiring |
+| 8 | Text-block `@Query` | **Landed** — verified empirically in this repo (see §8 above) |
+| 9 | Forge bundles providers | Not landed — no forge submodule depends on `resource-http`/`resource-notification`; live E2E still blocked |
+| 10 | `@Scheduled`/`@Heartbeat` | **Partial** — `Scheduled` is real (zero-param `Promise<Unit>` methods, interval or cron, KV-tracked state; candidate to replace the operator-triggered `SweepHolds` endpoint). No `@Heartbeat` |
+| 11 | Shape-aware lint | **Partial** — JBCT-VO-01 now exempts `@Slice`/`@PgSql` framework shapes (this repo's `@SuppressWarnings("JBCT-VO-01")` may be removable); no test-tree awareness |
+| 12 | Canonical-name codegen | **Landed** — both PR #364 fixes confirmed in released sources |
+| 13 | Clear errors | **All three landed** — multi-param slice methods now auto-generate a wrapper `<Method>Request` (no more crash); >15 deps auto-batch (`BatchedAll`, fail-fast preserved — the cap is gone); data-modifying CTEs now a clear located compile error |
+| 14 | Typed topics | **Landed** — `Topic<T>` in slice-api (envelope 1005→1006) |
+
+Also new in rc2, not on the list: `RateGuard` (injectable backpressure resource +
+`ResourceCapacityExhausted`), aspect-level observability config surface, `DeferredSliceInvokerFacade`,
+stream `TierAwareRetention`, header-mode API versioning (#198), `produces`/`consumes` media types (#339).
+
+---
+
 ## Addendum (2026-07-17) — rc2 release completeness
 
 `1.0.0-rc2` reached Maven Central on 2026-07-16, but the **`aether/resource` subtree was not
