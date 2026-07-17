@@ -10,8 +10,8 @@ import static java.lang.annotation.ElementType.PARAMETER;
 import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
 
-/// Publisher qualifier for the `price-changed` fact topic. Inject as `@PriceChangedPublisher Publisher<PriceChanged>` in a slice factory.
-@ResourceQualifier(type = Publisher.class, config = "price-changed")
+/// Publisher qualifier for the `price-changed` fact topic (typed constant `PriceChanged.PRICE_CHANGED`). Inject as `@PriceChangedPublisher Publisher<PriceChanged>` in a slice factory.
+@ResourceQualifier(type = Publisher.class, config = "PRICE_CHANGED")
 @Retention(RUNTIME)
 @Target(PARAMETER)
 public @interface PriceChangedPublisher {}

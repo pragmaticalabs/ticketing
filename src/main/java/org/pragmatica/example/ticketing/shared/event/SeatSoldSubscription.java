@@ -10,8 +10,8 @@ import static java.lang.annotation.ElementType.METHOD;
 import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
 
-/// Subscription qualifier for the `seat-sold` fact topic. Annotate a slice's `execute(SeatSold)` method.
-@ResourceQualifier(type = Subscriber.class, config = "seat-sold")
+/// Subscription qualifier for the `seat-sold` fact topic (typed constant `SeatSold.SEAT_SOLD`). Annotate a slice's `execute(SeatSold)` method.
+@ResourceQualifier(type = Subscriber.class, config = "SEAT_SOLD")
 @Retention(RUNTIME)
 @Target(METHOD)
 public @interface SeatSoldSubscription {}
