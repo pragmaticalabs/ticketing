@@ -308,7 +308,12 @@ only — a `Scheduled` method needs a custom qualifier annotation (we added `@Sw
 pattern as the subscription qualifiers. (b) Typed `Topic<T>` constants resolve fine in the
 slice-processor, but `jbct-maven-plugin generate-blueprint` still validates one `resources.toml`
 section per *resolved* topic name — the kebab-case sections must stay alongside the constants.
-Wish: teach blueprint validation the typed form so the redundant sections can go.
+Wish: teach blueprint validation the typed form so the redundant sections can go. (c) Adopted here:
+`[errors] strict = true` (18 slices, zero unmapped causes), migration auto-discovery
+(`migrations.list` deleted), 56 redundant VO-01 suppressions dropped, typed `Topic<T>` constants,
+`Scheduled` sweep (`[scheduling.sweep-holds]`, 60s), and `ValueMapping` for `SeatState`/`PriceTier`
+at store boundaries (rows decode VOs via `RowDecodeError.guard(... .lift())` — corrupt column values
+now fail typed at the row boundary).
 
 ---
 
