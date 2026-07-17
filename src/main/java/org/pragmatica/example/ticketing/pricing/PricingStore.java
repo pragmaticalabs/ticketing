@@ -1,12 +1,12 @@
 package org.pragmatica.example.ticketing.pricing;
 
+import java.util.UUID;
+
 import org.pragmatica.aether.pg.codegen.annotation.Query;
 import org.pragmatica.aether.resource.db.PgSql;
 import org.pragmatica.lang.Option;
 import org.pragmatica.lang.Promise;
 import org.pragmatica.lang.Unit;
-
-import java.util.UUID;
 
 
 /// Pricing-subsystem persistence, shared by every pricing use-case slice: an append-only
@@ -22,17 +22,19 @@ public interface PricingStore {
     /// `max(existing version) + 1` for this (event, tier), and return it. A `UNIQUE (event_id, tier,
     /// version)` index makes a concurrent double-allocation impossible: the loser fails the insert
     /// (a visible error) rather than silently corrupting history. Single statement, no CTE.
-    @Query("INSERT INTO price_events (id, event_id, tier, amount_minor, currency, version) "
-          + "SELECT :id, :eventId, :tier, :amountMinor, :currency, coalesce(max(pe.version), 0) + 1 "
-          + "FROM price_events pe WHERE pe.event_id = :eventId AND pe.tier = :tier "
-          + "RETURNING version")
+    @Query("""
+           INSERT INTO price_events (id, event_id, tier, amount_minor, currency, version)
+           SELECT :id, :eventId, :tier, :amountMinor, :currency, coalesce(max(pe.version), 0) + 1
+           FROM price_events pe WHERE pe.event_id = :eventId AND pe.tier = :tier
+           RETURNING version""")
     Promise<Long> appendPrice(UUID id, UUID eventId, String tier, long amountMinor, String currency);
 
-    @Query("INSERT INTO current_price (scope_key, event_id, tier, amount_minor, currency, version, updated_at) "
-          + "VALUES (:scopeKey, :eventId, :tier, :amountMinor, :currency, :version, now()) "
-          + "ON CONFLICT (scope_key) DO UPDATE SET amount_minor = EXCLUDED.amount_minor, "
-          + "currency = EXCLUDED.currency, version = EXCLUDED.version, updated_at = now() "
-          + "WHERE current_price.version < EXCLUDED.version")
+    @Query("""
+           INSERT INTO current_price (scope_key, event_id, tier, amount_minor, currency, version, updated_at)
+           VALUES (:scopeKey, :eventId, :tier, :amountMinor, :currency, :version, now())
+           ON CONFLICT (scope_key) DO UPDATE SET amount_minor = EXCLUDED.amount_minor,
+           currency = EXCLUDED.currency, version = EXCLUDED.version, updated_at = now()
+           WHERE current_price.version < EXCLUDED.version""")
     Promise<Unit> upsertCurrent(String scopeKey,
                                 UUID eventId,
                                 String tier,

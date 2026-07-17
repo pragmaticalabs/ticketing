@@ -1,12 +1,12 @@
 package org.pragmatica.example.ticketing.eventmanagement;
 
+import java.util.UUID;
+
 import org.pragmatica.aether.pg.codegen.annotation.Query;
 import org.pragmatica.aether.resource.db.PgSql;
 import org.pragmatica.lang.Option;
 import org.pragmatica.lang.Promise;
 import org.pragmatica.lang.Unit;
-
-import java.util.UUID;
 
 
 /// Event-management persistence (@PgSql), shared by every event-management use-case slice
@@ -32,8 +32,9 @@ public interface EventStore {
     @Query("SELECT EXISTS(SELECT 1 FROM events WHERE id = :id)")
     Promise<Boolean> eventExists(UUID id);
 
-    @Query("INSERT INTO seats (id, event_id, section, seat_row, number, tier, state) "
-          + "VALUES (:id, :eventId, :section, :seatRow, :number, :tier, 'available')")
+    @Query("""
+           INSERT INTO seats (id, event_id, section, seat_row, number, tier, state)
+           VALUES (:id, :eventId, :section, :seatRow, :number, :tier, 'available')""")
     Promise<Unit> insertSeat(UUID id, UUID eventId, String section, String seatRow, int number, String tier);
 
     @Query("UPDATE events SET status = 'on_sale' WHERE id = :id AND status = 'draft' RETURNING id")
