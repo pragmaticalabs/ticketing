@@ -1,11 +1,11 @@
 package org.pragmatica.example.ticketing.availability.query.seatstatus;
 
+import java.util.UUID;
+
 import org.pragmatica.aether.pg.codegen.annotation.Query;
 import org.pragmatica.aether.resource.db.PgSql;
 import org.pragmatica.lang.Option;
 import org.pragmatica.lang.Promise;
-
-import java.util.UUID;
 
 
 /// Persistence for the `seat-status` query use case: read a single seat's latest status from the

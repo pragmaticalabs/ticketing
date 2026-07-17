@@ -1,5 +1,9 @@
 package org.pragmatica.example.ticketing.eventmanagement.sales.salestatus;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
 import org.pragmatica.lang.Cause;
 import org.pragmatica.lang.Option;
 import org.pragmatica.lang.Promise;
@@ -9,10 +13,6 @@ import org.pragmatica.example.ticketing.eventmanagement.EventStore;
 import org.pragmatica.example.ticketing.eventmanagement.EventStore.EventRow;
 import org.pragmatica.example.ticketing.eventmanagement.EventStore.RowId;
 import org.pragmatica.example.ticketing.eventmanagement.sales.salestatus.SaleStatus.Request;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
@@ -169,7 +169,10 @@ class SaleStatusTest {
 
         store.insertEvent(id, "Wembley Arena", "2026-07-01T19:00:00Z").await();
         store.openEvent(id).await();
-        slice.execute(new Request(id.toString())).await().onFailure(cause -> fail(cause.message())).onSuccess(status -> assertThat(status.onSale()).isTrue());
+        slice.execute(new Request(id.toString()))
+             .await()
+             .onFailure(cause -> fail(cause.message()))
+             .onSuccess(status -> assertThat(status.onSale()).isTrue());
     }
 
     @Test
@@ -177,23 +180,35 @@ class SaleStatusTest {
         var id = UUID.randomUUID();
 
         store.insertEvent(id, "Wembley Arena", "2026-07-01T19:00:00Z").await();
-        slice.execute(new Request(id.toString())).await().onFailure(cause -> fail(cause.message())).onSuccess(status -> assertThat(status.onSale()).isFalse());
+        slice.execute(new Request(id.toString()))
+             .await()
+             .onFailure(cause -> fail(cause.message()))
+             .onSuccess(status -> assertThat(status.onSale()).isFalse());
     }
 
     @Test
     void execute_unknownEvent_returnsEventNotFound() {
-        slice.execute(new Request(UUID.randomUUID().toString())).await().onSuccess(status -> fail("Expected EventNotFound")).onFailure(cause -> assertThat(cause.message()).contains("not found"));
+        slice.execute(new Request(UUID.randomUUID().toString()))
+             .await()
+             .onSuccess(status -> fail("Expected EventNotFound"))
+             .onFailure(cause -> assertThat(cause.message()).contains("not found"));
     }
 
     @Test
     void execute_malformedId_returnsValidationFailure() {
-        slice.execute(new Request("not-a-uuid")).await().onSuccess(status -> fail("Expected validation failure")).onFailure(cause -> assertThat(cause.message()).contains("valid UUID"));
+        slice.execute(new Request("not-a-uuid"))
+             .await()
+             .onSuccess(status -> fail("Expected validation failure"))
+             .onFailure(cause -> assertThat(cause.message()).contains("valid UUID"));
     }
 
     @Test
     void execute_storeFails_returnsStoreUnavailable() {
         var failing = SaleStatus.saleStatus(new FailingStore());
 
-        failing.execute(new Request(UUID.randomUUID().toString())).await().onSuccess(status -> fail("Expected StoreUnavailable")).onFailure(cause -> assertThat(cause.message()).contains("unavailable"));
+        failing.execute(new Request(UUID.randomUUID().toString()))
+               .await()
+               .onSuccess(status -> fail("Expected StoreUnavailable"))
+               .onFailure(cause -> assertThat(cause.message()).contains("unavailable"));
     }
 }

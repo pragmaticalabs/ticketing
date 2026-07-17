@@ -1,12 +1,12 @@
 package org.pragmatica.example.ticketing.availability.query.soldcount;
 
-import org.pragmatica.lang.Promise;
-import org.pragmatica.lang.utils.Causes;
-import org.pragmatica.example.ticketing.availability.query.soldcount.SoldCount.Request;
-
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+
+import org.pragmatica.lang.Promise;
+import org.pragmatica.lang.utils.Causes;
+import org.pragmatica.example.ticketing.availability.query.soldcount.SoldCount.Request;
 
 import org.junit.jupiter.api.Test;
 
@@ -44,23 +44,35 @@ class SoldCountTest {
         var event = UUID.randomUUID();
 
         store.seed(event, 2L);
-        slice.execute(new Request(event.toString())).await().onFailure(cause -> fail(cause.message())).onSuccess(r -> assertThat(r.sold()).isEqualTo(2));
+        slice.execute(new Request(event.toString()))
+             .await()
+             .onFailure(cause -> fail(cause.message()))
+             .onSuccess(r -> assertThat(r.sold()).isEqualTo(2));
     }
 
     @Test
     void execute_noSales_returnsZero() {
-        slice.execute(new Request(UUID.randomUUID().toString())).await().onFailure(cause -> fail(cause.message())).onSuccess(r -> assertThat(r.sold()).isEqualTo(0));
+        slice.execute(new Request(UUID.randomUUID().toString()))
+             .await()
+             .onFailure(cause -> fail(cause.message()))
+             .onSuccess(r -> assertThat(r.sold()).isEqualTo(0));
     }
 
     @Test
     void execute_malformedEvent_returnsError() {
-        slice.execute(new Request("not-a-uuid")).await().onSuccess(r -> fail("Expected validation failure")).onFailure(cause -> assertThat(cause.message()).contains("valid UUID"));
+        slice.execute(new Request("not-a-uuid"))
+             .await()
+             .onSuccess(r -> fail("Expected validation failure"))
+             .onFailure(cause -> assertThat(cause.message()).contains("valid UUID"));
     }
 
     @Test
     void execute_storeFails_returnsStoreUnavailable() {
         var failing = SoldCount.soldCount(new FailingStore());
 
-        failing.execute(new Request(UUID.randomUUID().toString())).await().onSuccess(r -> fail("Expected store failure")).onFailure(cause -> assertThat(cause).isInstanceOf(SoldCount.AvailabilityError.StoreUnavailable.class));
+        failing.execute(new Request(UUID.randomUUID().toString()))
+               .await()
+               .onSuccess(r -> fail("Expected store failure"))
+               .onFailure(cause -> assertThat(cause).isInstanceOf(SoldCount.AvailabilityError.StoreUnavailable.class));
     }
 }

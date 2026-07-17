@@ -1,5 +1,7 @@
 package org.pragmatica.example.ticketing.booking.cancellation.cancelticket;
 
+import java.util.UUID;
+
 import org.pragmatica.aether.resource.http.HttpClient;
 import org.pragmatica.aether.slice.Publisher;
 import org.pragmatica.lang.Promise;
@@ -8,8 +10,6 @@ import org.pragmatica.example.ticketing.booking.FailingBookingStore;
 import org.pragmatica.example.ticketing.booking.FakeGateway;
 import org.pragmatica.example.ticketing.booking.InMemoryBookingStore;
 import org.pragmatica.example.ticketing.shared.event.SeatReleased;
-
-import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
@@ -42,7 +42,9 @@ class CancelTicketTest {
 
         store.claimSeat(reservationId, seat, event, customerUuid).await().onFailure(cause -> fail(cause.message()));
         store.confirmReservation(reservationId).await().onFailure(cause -> fail(cause.message()));
-        store.insertBooking(bookingId, reservationId, seat, event, customerUuid, ticketId).await().onFailure(cause -> fail(cause.message()));
+        store.insertBooking(bookingId, reservationId, seat, event, customerUuid, ticketId)
+             .await()
+             .onFailure(cause -> fail(cause.message()));
 
         return bookingId.toString();
     }
@@ -54,10 +56,13 @@ class CancelTicketTest {
         var customer = UUID.randomUUID().toString();
         var booking = seedConfirmedBooking(store, customer);
 
-        slice.execute(new CancelTicket.Request(booking, customer)).await().onFailure(cause -> fail(cause.message())).onSuccess(response -> {
-            assertThat(response.booking()).isEqualTo(booking);
-            assertThat(response.receipt()).isNotBlank();
-        });
+        slice.execute(new CancelTicket.Request(booking, customer))
+             .await()
+             .onFailure(cause -> fail(cause.message()))
+             .onSuccess(response -> {
+                            assertThat(response.booking()).isEqualTo(booking);
+                            assertThat(response.receipt()).isNotBlank();
+                        });
     }
 
     @Test
@@ -68,7 +73,10 @@ class CancelTicketTest {
                                            UUID.randomUUID().toString());
 
         slice.execute(new CancelTicket.Request(booking,
-                                               UUID.randomUUID().toString())).await().onSuccess(response -> fail("Expected NotOwner")).onFailure(cause -> assertThat(cause.message()).contains("another customer"));
+                                               UUID.randomUUID().toString()))
+             .await()
+             .onSuccess(response -> fail("Expected NotOwner"))
+             .onFailure(cause -> assertThat(cause.message()).contains("another customer"));
     }
 
     @Test
@@ -76,7 +84,10 @@ class CancelTicketTest {
         var slice = buildSlice(new InMemoryBookingStore());
 
         slice.execute(new CancelTicket.Request(UUID.randomUUID().toString(),
-                                               UUID.randomUUID().toString())).await().onSuccess(response -> fail("Expected BookingNotFound")).onFailure(cause -> assertThat(cause.message()).contains("not found"));
+                                               UUID.randomUUID().toString()))
+             .await()
+             .onSuccess(response -> fail("Expected BookingNotFound"))
+             .onFailure(cause -> assertThat(cause.message()).contains("not found"));
     }
 
     @Test
@@ -87,7 +98,10 @@ class CancelTicketTest {
         var booking = seedConfirmedBooking(store, customer);
 
         store.cancelBooking(UUID.fromString(booking)).await().onFailure(cause -> fail(cause.message()));
-        slice.execute(new CancelTicket.Request(booking, customer)).await().onSuccess(response -> fail("Expected AlreadyCancelled")).onFailure(cause -> assertThat(cause.message()).contains("already cancelled"));
+        slice.execute(new CancelTicket.Request(booking, customer))
+             .await()
+             .onSuccess(response -> fail("Expected AlreadyCancelled"))
+             .onFailure(cause -> assertThat(cause.message()).contains("already cancelled"));
     }
 
     @Test
@@ -97,16 +111,21 @@ class CancelTicketTest {
         var customer = UUID.randomUUID().toString();
         var booking = seedConfirmedBooking(store, customer);
 
-        slice.execute(new CancelTicket.Request(booking, customer)).await().onSuccess(response -> fail("Expected RefundFailed")).onFailure(cause -> assertThat(cause.message()).contains("Refund could not be completed"));
+        slice.execute(new CancelTicket.Request(booking, customer))
+             .await()
+             .onSuccess(response -> fail("Expected RefundFailed"))
+             .onFailure(cause -> assertThat(cause.message()).contains("Refund could not be completed"));
     }
 
     @Test
     void execute_storeFindFails_returnsStoreUnavailable() {
-        var slice = buildSlice(new FailingBookingStore(FailingBookingStore.FailOp.FIND_BOOKING),
-                               new FakeGateway(true));
+        var slice = buildSlice(new FailingBookingStore(FailingBookingStore.FailOp.FIND_BOOKING), new FakeGateway(true));
 
         slice.execute(new CancelTicket.Request(UUID.randomUUID().toString(),
-                                               UUID.randomUUID().toString())).await().onSuccess(response -> fail("Expected StoreUnavailable")).onFailure(cause -> assertThat(cause.message()).contains("store is unavailable"));
+                                               UUID.randomUUID().toString()))
+             .await()
+             .onSuccess(response -> fail("Expected StoreUnavailable"))
+             .onFailure(cause -> assertThat(cause.message()).contains("store is unavailable"));
     }
 
     @Test

@@ -1,5 +1,7 @@
 package org.pragmatica.example.ticketing.booking.purchase.buyticket;
 
+import java.util.UUID;
+
 import org.pragmatica.aether.resource.http.HttpClient;
 import org.pragmatica.aether.resource.notification.NotificationResult;
 import org.pragmatica.aether.resource.notification.NotificationSender;
@@ -13,8 +15,6 @@ import org.pragmatica.example.ticketing.booking.InMemoryBookingStore;
 import org.pragmatica.example.ticketing.eventmanagement.sales.salestatus.SaleStatus;
 import org.pragmatica.example.ticketing.pricing.quoting.quoteprice.QuotePrice;
 import org.pragmatica.example.ticketing.shared.event.SeatSold;
-
-import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
@@ -37,7 +37,6 @@ class BuyTicketTest {
                                                                                              1));
 
     private final QuotePrice failingQuote = _ -> Causes.cause("no price").promise();
-
     private final Publisher<SeatSold> seatSold = _ -> Promise.UNIT;
 
     private BuyTicket buildSlice(BookingStore store, HttpClient gateway, QuotePrice quote, boolean onSale) {
@@ -60,14 +59,17 @@ class BuyTicketTest {
         slice.execute(new BuyTicket.Request(UUID.randomUUID().toString(),
                                             event,
                                             seat,
-                                            "STANDARD")).await().onFailure(cause -> fail(cause.message())).onSuccess(response -> {
-            assertThat(response.seat()).isEqualTo(seat);
-            assertThat(response.amountMinor()).isEqualTo(2500);
-            assertThat(response.currency()).isEqualTo("USD");
-            assertThat(response.booking()).isNotBlank();
-            assertThat(response.ticket()).isNotBlank();
-            assertThat(response.receipt()).isNotBlank();
-        });
+                                            "STANDARD"))
+             .await()
+             .onFailure(cause -> fail(cause.message()))
+             .onSuccess(response -> {
+                            assertThat(response.seat()).isEqualTo(seat);
+                            assertThat(response.amountMinor()).isEqualTo(2500);
+                            assertThat(response.currency()).isEqualTo("USD");
+                            assertThat(response.booking()).isNotBlank();
+                            assertThat(response.ticket()).isNotBlank();
+                            assertThat(response.receipt()).isNotBlank();
+                        });
     }
 
     @Test
@@ -77,11 +79,19 @@ class BuyTicketTest {
         var event = UUID.randomUUID().toString();
         var seat = UUID.randomUUID().toString();
 
-        store.claimSeat(UUID.randomUUID(), UUID.fromString(seat), UUID.fromString(event), UUID.randomUUID()).await().onFailure(cause -> fail(cause.message()));
+        store.claimSeat(UUID.randomUUID(),
+                        UUID.fromString(seat),
+                        UUID.fromString(event),
+                        UUID.randomUUID())
+             .await()
+             .onFailure(cause -> fail(cause.message()));
         slice.execute(new BuyTicket.Request(UUID.randomUUID().toString(),
                                             event,
                                             seat,
-                                            "STANDARD")).await().onSuccess(response -> fail("Expected SeatUnavailable")).onFailure(cause -> assertThat(cause.message()).contains("no longer available"));
+                                            "STANDARD"))
+             .await()
+             .onSuccess(response -> fail("Expected SeatUnavailable"))
+             .onFailure(cause -> assertThat(cause.message()).contains("no longer available"));
     }
 
     @Test
@@ -91,7 +101,10 @@ class BuyTicketTest {
         slice.execute(new BuyTicket.Request(UUID.randomUUID().toString(),
                                             UUID.randomUUID().toString(),
                                             UUID.randomUUID().toString(),
-                                            "STANDARD")).await().onSuccess(response -> fail("Expected EventNotSelling")).onFailure(cause -> assertThat(cause.message()).contains("not currently selling"));
+                                            "STANDARD"))
+             .await()
+             .onSuccess(response -> fail("Expected EventNotSelling"))
+             .onFailure(cause -> assertThat(cause.message()).contains("not currently selling"));
     }
 
     @Test
@@ -104,7 +117,10 @@ class BuyTicketTest {
         slice.execute(new BuyTicket.Request(UUID.randomUUID().toString(),
                                             event,
                                             seat,
-                                            "STANDARD")).await().onSuccess(response -> fail("Expected PaymentDeclined")).onFailure(cause -> assertThat(cause.message()).contains("declined"));
+                                            "STANDARD"))
+             .await()
+             .onSuccess(response -> fail("Expected PaymentDeclined"))
+             .onFailure(cause -> assertThat(cause.message()).contains("declined"));
         assertThat(store.reservationStateBySeat(UUID.fromString(seat))).isEqualTo("cancelled");
     }
 
@@ -123,10 +139,16 @@ class BuyTicketTest {
         slice.execute(new BuyTicket.Request(customer.toString(),
                                             event.toString(),
                                             seat.toString(),
-                                            "STANDARD")).await().onSuccess(response -> fail("Expected store failure")).onFailure(cause -> assertThat(cause.message()).contains("unavailable"));
+                                            "STANDARD"))
+             .await()
+             .onSuccess(response -> fail("Expected store failure"))
+             .onFailure(cause -> assertThat(cause.message()).contains("unavailable"));
         assertThat(gateway.calls()).contains("/authorize", "/void");
         assertThat(store.reservationStateBySeat(seat)).isEqualTo("cancelled");
-        store.activeBookingCount(customer).await().onFailure(cause -> fail(cause.message())).onSuccess(count -> assertThat(count.longValue()).isZero());
+        store.activeBookingCount(customer)
+             .await()
+             .onFailure(cause -> fail(cause.message()))
+             .onSuccess(count -> assertThat(count.longValue()).isZero());
     }
 
     @Test
@@ -139,7 +161,10 @@ class BuyTicketTest {
         slice.execute(new BuyTicket.Request(customer.toString(),
                                             UUID.randomUUID().toString(),
                                             UUID.randomUUID().toString(),
-                                            "STANDARD")).await().onSuccess(response -> fail("Expected CustomerIneligible")).onFailure(cause -> assertThat(cause.message()).contains("active bookings"));
+                                            "STANDARD"))
+             .await()
+             .onSuccess(response -> fail("Expected CustomerIneligible"))
+             .onFailure(cause -> assertThat(cause.message()).contains("active bookings"));
     }
 
     @Test
@@ -150,7 +175,10 @@ class BuyTicketTest {
         slice.execute(new BuyTicket.Request(UUID.randomUUID().toString(),
                                             UUID.randomUUID().toString(),
                                             UUID.randomUUID().toString(),
-                                            "STANDARD")).await().onSuccess(response -> fail("Expected PriceUnavailable")).onFailure(cause -> assertThat(cause.message()).contains("price is available"));
+                                            "STANDARD"))
+             .await()
+             .onSuccess(response -> fail("Expected PriceUnavailable"))
+             .onFailure(cause -> assertThat(cause.message()).contains("price is available"));
     }
 
     @Test
@@ -162,7 +190,10 @@ class BuyTicketTest {
         slice.execute(new BuyTicket.Request(UUID.randomUUID().toString(),
                                             UUID.randomUUID().toString(),
                                             seat.toString(),
-                                            "STANDARD")).await().onSuccess(response -> fail("Expected PaymentProviderUnavailable")).onFailure(cause -> assertThat(cause.message()).contains("provider is unavailable"));
+                                            "STANDARD"))
+             .await()
+             .onSuccess(response -> fail("Expected PaymentProviderUnavailable"))
+             .onFailure(cause -> assertThat(cause.message()).contains("provider is unavailable"));
         assertThat(store.reservationStateBySeat(seat)).isEqualTo("cancelled");
     }
 
@@ -174,7 +205,10 @@ class BuyTicketTest {
         slice.execute(new BuyTicket.Request(UUID.randomUUID().toString(),
                                             UUID.randomUUID().toString(),
                                             UUID.randomUUID().toString(),
-                                            "STANDARD")).await().onSuccess(response -> fail("Expected StoreUnavailable")).onFailure(cause -> assertThat(cause.message()).contains("store is unavailable"));
+                                            "STANDARD"))
+             .await()
+             .onSuccess(response -> fail("Expected StoreUnavailable"))
+             .onFailure(cause -> assertThat(cause.message()).contains("store is unavailable"));
     }
 
     @Test
@@ -192,7 +226,9 @@ class BuyTicketTest {
                                 UUID.randomUUID(),
                                 UUID.randomUUID(),
                                 customer,
-                                UUID.randomUUID()).await().onFailure(cause -> fail(cause.message()));
+                                UUID.randomUUID())
+                 .await()
+                 .onFailure(cause -> fail(cause.message()));
         }
     }
 }

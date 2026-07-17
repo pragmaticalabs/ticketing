@@ -88,8 +88,9 @@ public interface CreateEvent {
 
                 return store.insertEvent(uuid,
                                          valid.venue(),
-                                         valid.onSaleAt().toString()).mapError(_ -> CreateEventError.storeUnavailable())
-                                        .map(_ -> new Response(uuid.toString()));
+                                         valid.onSaleAt().toString())
+                            .mapError(_ -> CreateEventError.storeUnavailable())
+                            .map(_ -> new Response(uuid.toString()));
             }
         }
 

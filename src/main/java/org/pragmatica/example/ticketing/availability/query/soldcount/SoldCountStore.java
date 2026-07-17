@@ -1,10 +1,10 @@
 package org.pragmatica.example.ticketing.availability.query.soldcount;
 
+import java.util.UUID;
+
 import org.pragmatica.aether.pg.codegen.annotation.Query;
 import org.pragmatica.aether.resource.db.PgSql;
 import org.pragmatica.lang.Promise;
-
-import java.util.UUID;
 
 
 /// Persistence for the `sold-count` query use case: count the sold seats of an event from the

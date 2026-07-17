@@ -1,5 +1,9 @@
 package org.pragmatica.example.ticketing.eventmanagement.capacity.addseat;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
 import org.pragmatica.lang.Cause;
 import org.pragmatica.lang.Option;
 import org.pragmatica.lang.Promise;
@@ -9,10 +13,6 @@ import org.pragmatica.example.ticketing.eventmanagement.EventStore;
 import org.pragmatica.example.ticketing.eventmanagement.EventStore.EventRow;
 import org.pragmatica.example.ticketing.eventmanagement.EventStore.RowId;
 import org.pragmatica.example.ticketing.eventmanagement.capacity.addseat.AddSeat.Request;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
@@ -155,7 +155,14 @@ class AddSeatTest {
         var id = UUID.randomUUID();
 
         store.insertEvent(id, "Wembley Arena", "2026-07-01T19:00:00Z").await();
-        slice.execute(new Request(id.toString(), "A", "12", 7, "STANDARD")).await().onFailure(cause -> fail(cause.message())).onSuccess(response -> assertThat(response.seat()).isNotBlank());
+        slice.execute(new Request(id.toString(),
+                                  "A",
+                                  "12",
+                                  7,
+                                  "STANDARD"))
+             .await()
+             .onFailure(cause -> fail(cause.message()))
+             .onSuccess(response -> assertThat(response.seat()).isNotBlank());
     }
 
     @Test
@@ -164,7 +171,10 @@ class AddSeatTest {
                                   "A",
                                   "12",
                                   7,
-                                  "STANDARD")).await().onSuccess(response -> fail("Expected EventNotFound")).onFailure(cause -> assertThat(cause.message()).contains("not found"));
+                                  "STANDARD"))
+             .await()
+             .onSuccess(response -> fail("Expected EventNotFound"))
+             .onFailure(cause -> assertThat(cause.message()).contains("not found"));
     }
 
     @Test
@@ -173,16 +183,18 @@ class AddSeatTest {
                                   "A",
                                   "12",
                                   7,
-                                  "GOLD")).await().onSuccess(response -> fail("Expected validation failure")).onFailure(cause -> assertThat(cause.message()).contains("tier"));
+                                  "GOLD"))
+             .await()
+             .onSuccess(response -> fail("Expected validation failure"))
+             .onFailure(cause -> assertThat(cause.message()).contains("tier"));
     }
 
     @Test
     void execute_malformedEvent_returnsValidationFailure() {
-        slice.execute(new Request("not-a-uuid",
-                                  "A",
-                                  "12",
-                                  7,
-                                  "STANDARD")).await().onSuccess(response -> fail("Expected validation failure")).onFailure(cause -> assertThat(cause.message()).contains("valid UUID"));
+        slice.execute(new Request("not-a-uuid", "A", "12", 7, "STANDARD"))
+             .await()
+             .onSuccess(response -> fail("Expected validation failure"))
+             .onFailure(cause -> assertThat(cause.message()).contains("valid UUID"));
     }
 
     @Test
@@ -193,6 +205,9 @@ class AddSeatTest {
                                     "A",
                                     "12",
                                     7,
-                                    "STANDARD")).await().onSuccess(response -> fail("Expected StoreUnavailable")).onFailure(cause -> assertThat(cause.message()).contains("unavailable"));
+                                    "STANDARD"))
+               .await()
+               .onSuccess(response -> fail("Expected StoreUnavailable"))
+               .onFailure(cause -> assertThat(cause.message()).contains("unavailable"));
     }
 }

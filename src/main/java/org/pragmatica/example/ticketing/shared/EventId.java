@@ -1,11 +1,11 @@
 package org.pragmatica.example.ticketing.shared;
 
+import java.util.UUID;
+
 import org.pragmatica.lang.Cause;
 import org.pragmatica.lang.Result;
 import org.pragmatica.lang.Verify;
 import org.pragmatica.lang.vo.Uuid;
-
-import java.util.UUID;
 
 
 public record EventId(Uuid value) {
@@ -36,8 +36,9 @@ public record EventId(Uuid value) {
     public static Result<EventId> eventId(String raw) {
         return Verify.ensure(raw,
                              Verify.Is::present,
-                             Error.blank()).flatMap(present -> Uuid.uuid(present).mapError(_ -> Error.malformed()))
-                            .map(EventId::new);
+                             Error.blank())
+                     .flatMap(present -> Uuid.uuid(present).mapError(_ -> Error.malformed()))
+                     .map(EventId::new);
     }
 
     public static EventId eventId(UUID raw) {

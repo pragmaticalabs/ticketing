@@ -1,9 +1,9 @@
 package org.pragmatica.example.ticketing.booking.hold.acquirehold;
 
+import java.util.UUID;
+
 import org.pragmatica.example.ticketing.booking.FailingBookingStore;
 import org.pragmatica.example.ticketing.booking.InMemoryBookingStore;
-
-import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
@@ -26,10 +26,13 @@ class AcquireHoldTest {
 
         slice.execute(new AcquireHold.Request(UUID.randomUUID().toString(),
                                               UUID.randomUUID().toString(),
-                                              seat)).await().onFailure(cause -> fail(cause.message())).onSuccess(response -> {
-            assertThat(response.state()).isEqualTo("FRESH");
-            assertThat(response.reservation()).isNotBlank();
-        });
+                                              seat))
+             .await()
+             .onFailure(cause -> fail(cause.message()))
+             .onSuccess(response -> {
+                            assertThat(response.state()).isEqualTo("FRESH");
+                            assertThat(response.reservation()).isNotBlank();
+                        });
     }
 
     @Test
@@ -38,10 +41,18 @@ class AcquireHoldTest {
         var slice = buildSlice(store);
         var seat = UUID.randomUUID().toString();
 
-        store.claimSeat(UUID.randomUUID(), UUID.fromString(seat), UUID.randomUUID(), UUID.randomUUID()).await().onFailure(cause -> fail(cause.message()));
+        store.claimSeat(UUID.randomUUID(),
+                        UUID.fromString(seat),
+                        UUID.randomUUID(),
+                        UUID.randomUUID())
+             .await()
+             .onFailure(cause -> fail(cause.message()));
         slice.execute(new AcquireHold.Request(UUID.randomUUID().toString(),
                                               UUID.randomUUID().toString(),
-                                              seat)).await().onSuccess(response -> fail("Expected SeatUnavailable")).onFailure(cause -> assertThat(cause.message()).contains("no longer available"));
+                                              seat))
+             .await()
+             .onSuccess(response -> fail("Expected SeatUnavailable"))
+             .onFailure(cause -> assertThat(cause.message()).contains("no longer available"));
     }
 
     @Test
@@ -50,7 +61,10 @@ class AcquireHoldTest {
 
         slice.execute(new AcquireHold.Request(UUID.randomUUID().toString(),
                                               UUID.randomUUID().toString(),
-                                              UUID.randomUUID().toString())).await().onSuccess(response -> fail("Expected StoreUnavailable")).onFailure(cause -> assertThat(cause.message()).contains("store is unavailable"));
+                                              UUID.randomUUID().toString()))
+             .await()
+             .onSuccess(response -> fail("Expected StoreUnavailable"))
+             .onFailure(cause -> assertThat(cause.message()).contains("store is unavailable"));
     }
 
     @Test

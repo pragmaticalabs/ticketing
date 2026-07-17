@@ -1,5 +1,9 @@
 package org.pragmatica.example.ticketing.eventmanagement.lifecycle.createevent;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
 import org.pragmatica.lang.Cause;
 import org.pragmatica.lang.Option;
 import org.pragmatica.lang.Promise;
@@ -9,10 +13,6 @@ import org.pragmatica.example.ticketing.eventmanagement.EventStore;
 import org.pragmatica.example.ticketing.eventmanagement.EventStore.EventRow;
 import org.pragmatica.example.ticketing.eventmanagement.EventStore.RowId;
 import org.pragmatica.example.ticketing.eventmanagement.lifecycle.createevent.CreateEvent.Request;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
@@ -152,23 +152,35 @@ class CreateEventTest {
 
     @Test
     void createEvent_validRequest_returnsEvent() {
-        slice.execute(new Request("Wembley Arena", "2026-07-01T19:00:00Z")).await().onFailure(cause -> fail(cause.message())).onSuccess(response -> assertThat(response.event()).isNotBlank());
+        slice.execute(new Request("Wembley Arena", "2026-07-01T19:00:00Z"))
+             .await()
+             .onFailure(cause -> fail(cause.message()))
+             .onSuccess(response -> assertThat(response.event()).isNotBlank());
     }
 
     @Test
     void createEvent_blankVenue_returnsBlankVenue() {
-        slice.execute(new Request("   ", "2026-07-01T19:00:00Z")).await().onSuccess(response -> fail("Expected BlankVenue")).onFailure(cause -> assertThat(cause.message()).contains("Venue"));
+        slice.execute(new Request("   ", "2026-07-01T19:00:00Z"))
+             .await()
+             .onSuccess(response -> fail("Expected BlankVenue"))
+             .onFailure(cause -> assertThat(cause.message()).contains("Venue"));
     }
 
     @Test
     void createEvent_malformedOnSaleAt_returnsMalformedOnSaleAt() {
-        slice.execute(new Request("Wembley Arena", "not-a-timestamp")).await().onSuccess(response -> fail("Expected MalformedOnSaleAt")).onFailure(cause -> assertThat(cause.message()).contains("ISO-8601"));
+        slice.execute(new Request("Wembley Arena", "not-a-timestamp"))
+             .await()
+             .onSuccess(response -> fail("Expected MalformedOnSaleAt"))
+             .onFailure(cause -> assertThat(cause.message()).contains("ISO-8601"));
     }
 
     @Test
     void createEvent_storeFails_returnsStoreUnavailable() {
         var failing = CreateEvent.createEvent(new FailingStore());
 
-        failing.execute(new Request("Wembley Arena", "2026-07-01T19:00:00Z")).await().onSuccess(response -> fail("Expected StoreUnavailable")).onFailure(cause -> assertThat(cause.message()).contains("unavailable"));
+        failing.execute(new Request("Wembley Arena", "2026-07-01T19:00:00Z"))
+               .await()
+               .onSuccess(response -> fail("Expected StoreUnavailable"))
+               .onFailure(cause -> assertThat(cause.message()).contains("unavailable"));
     }
 }

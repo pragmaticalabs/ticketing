@@ -1,5 +1,9 @@
 package org.pragmatica.example.ticketing.eventmanagement.capacity.releaseseat;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
 import org.pragmatica.lang.Cause;
 import org.pragmatica.lang.Option;
 import org.pragmatica.lang.Promise;
@@ -9,10 +13,6 @@ import org.pragmatica.example.ticketing.eventmanagement.EventStore;
 import org.pragmatica.example.ticketing.eventmanagement.EventStore.EventRow;
 import org.pragmatica.example.ticketing.eventmanagement.EventStore.RowId;
 import org.pragmatica.example.ticketing.eventmanagement.capacity.releaseseat.ReleaseSeat.Request;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
@@ -169,7 +169,10 @@ class ReleaseSeatTest {
 
         store.insertSeat(seat, UUID.randomUUID(), "A", "12", 7, "STANDARD").await();
         store.blockSeat(seat).await();
-        slice.execute(new Request(seat.toString())).await().onFailure(cause -> fail(cause.message())).onSuccess(response -> assertThat(response.seat()).isEqualTo(seat.toString()));
+        slice.execute(new Request(seat.toString()))
+             .await()
+             .onFailure(cause -> fail(cause.message()))
+             .onSuccess(response -> assertThat(response.seat()).isEqualTo(seat.toString()));
     }
 
     @Test
@@ -177,18 +180,27 @@ class ReleaseSeatTest {
         var seat = UUID.randomUUID();
 
         store.insertSeat(seat, UUID.randomUUID(), "A", "12", 7, "STANDARD").await();
-        slice.execute(new Request(seat.toString())).await().onSuccess(response -> fail("Expected SeatNotBlocked")).onFailure(cause -> assertThat(cause.message()).contains("not blocked"));
+        slice.execute(new Request(seat.toString()))
+             .await()
+             .onSuccess(response -> fail("Expected SeatNotBlocked"))
+             .onFailure(cause -> assertThat(cause.message()).contains("not blocked"));
     }
 
     @Test
     void execute_malformedSeat_returnsValidationFailure() {
-        slice.execute(new Request("not-a-uuid")).await().onSuccess(response -> fail("Expected validation failure")).onFailure(cause -> assertThat(cause.message()).contains("valid UUID"));
+        slice.execute(new Request("not-a-uuid"))
+             .await()
+             .onSuccess(response -> fail("Expected validation failure"))
+             .onFailure(cause -> assertThat(cause.message()).contains("valid UUID"));
     }
 
     @Test
     void execute_storeFails_returnsStoreUnavailable() {
         var failing = ReleaseSeat.releaseSeat(new FailingStore());
 
-        failing.execute(new Request(UUID.randomUUID().toString())).await().onSuccess(response -> fail("Expected StoreUnavailable")).onFailure(cause -> assertThat(cause.message()).contains("unavailable"));
+        failing.execute(new Request(UUID.randomUUID().toString()))
+               .await()
+               .onSuccess(response -> fail("Expected StoreUnavailable"))
+               .onFailure(cause -> assertThat(cause.message()).contains("unavailable"));
     }
 }

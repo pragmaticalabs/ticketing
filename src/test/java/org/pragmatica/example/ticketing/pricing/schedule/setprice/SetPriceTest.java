@@ -1,5 +1,11 @@
 package org.pragmatica.example.ticketing.pricing.schedule.setprice;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
 import org.pragmatica.aether.slice.Publisher;
 import org.pragmatica.lang.Option;
 import org.pragmatica.lang.Promise;
@@ -9,12 +15,6 @@ import org.pragmatica.example.ticketing.pricing.PricingStore;
 import org.pragmatica.example.ticketing.pricing.PricingStore.PriceRow;
 import org.pragmatica.example.ticketing.pricing.schedule.setprice.SetPrice.Request;
 import org.pragmatica.example.ticketing.shared.event.PriceChanged;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
@@ -30,11 +30,7 @@ class SetPriceTest {
         // Allocate the next version for (event, tier) as max-existing + 1 (starting at 1), like the
         // real append-only price_events log, and return it.
         @Override
-        public Promise<Long> appendPrice(UUID id,
-                                         UUID eventId,
-                                         String tier,
-                                         long amountMinor,
-                                         String currency) {
+        public Promise<Long> appendPrice(UUID id, UUID eventId, String tier, long amountMinor, String currency) {
             return Promise.success(versions.merge(eventId + ":" + tier, 1L, (existing, increment) -> existing + 1L));
         }
 
@@ -59,11 +55,7 @@ class SetPriceTest {
     // Store whose every operation fails, to simulate the pricing store being unavailable.
     private static final class FailingStore implements PricingStore {
         @Override
-        public Promise<Long> appendPrice(UUID id,
-                                         UUID eventId,
-                                         String tier,
-                                         long amountMinor,
-                                         String currency) {
+        public Promise<Long> appendPrice(UUID id, UUID eventId, String tier, long amountMinor, String currency) {
             return Causes.cause("pricing store unavailable").promise();
         }
 
@@ -102,7 +94,10 @@ class SetPriceTest {
     void execute_validRequest_returnsVersionAndPublishes() {
         var event = UUID.randomUUID().toString();
 
-        slice.execute(new Request(event, "STANDARD", "49.50", "USD")).await().onFailure(cause -> fail(cause.message())).onSuccess(r -> assertThat(r.version()).isEqualTo(1L));
+        slice.execute(new Request(event, "STANDARD", "49.50", "USD"))
+             .await()
+             .onFailure(cause -> fail(cause.message()))
+             .onSuccess(r -> assertThat(r.version()).isEqualTo(1L));
         assertThat(publisher.published).hasSize(1);
         assertThat(publisher.published.getFirst().amountMinor()).isEqualTo(4950);
         assertThat(publisher.published.getFirst().currency()).isEqualTo("USD");
@@ -110,7 +105,10 @@ class SetPriceTest {
 
     @Test
     void execute_malformedEvent_returnsError() {
-        slice.execute(new Request("not-a-uuid", "STANDARD", "49.50", "USD")).await().onSuccess(r -> fail("Expected validation failure")).onFailure(cause -> assertThat(cause.message()).contains("valid UUID"));
+        slice.execute(new Request("not-a-uuid", "STANDARD", "49.50", "USD"))
+             .await()
+             .onSuccess(r -> fail("Expected validation failure"))
+             .onFailure(cause -> assertThat(cause.message()).contains("valid UUID"));
     }
 
     @Test
@@ -118,7 +116,10 @@ class SetPriceTest {
         slice.execute(new Request(UUID.randomUUID().toString(),
                                   "STANDARD",
                                   "not-a-number",
-                                  "USD")).await().onSuccess(r -> fail("Expected validation failure")).onFailure(cause -> assertThat(cause.message()).contains("malformed"));
+                                  "USD"))
+             .await()
+             .onSuccess(r -> fail("Expected validation failure"))
+             .onFailure(cause -> assertThat(cause.message()).contains("malformed"));
     }
 
     @Test
@@ -126,7 +127,10 @@ class SetPriceTest {
         slice.execute(new Request(UUID.randomUUID().toString(),
                                   "STANDARD",
                                   "49.50",
-                                  "XYZ")).await().onSuccess(r -> fail("Expected validation failure")).onFailure(cause -> assertThat(cause.message()).contains("Unknown currency"));
+                                  "XYZ"))
+             .await()
+             .onSuccess(r -> fail("Expected validation failure"))
+             .onFailure(cause -> assertThat(cause.message()).contains("Unknown currency"));
     }
 
     @Test
@@ -134,7 +138,10 @@ class SetPriceTest {
         slice.execute(new Request(UUID.randomUUID().toString(),
                                   "NOSUCHTIER",
                                   "49.50",
-                                  "USD")).await().onSuccess(r -> fail("Expected validation failure")).onFailure(cause -> assertThat(cause.message()).contains("Unknown price tier"));
+                                  "USD"))
+             .await()
+             .onSuccess(r -> fail("Expected validation failure"))
+             .onFailure(cause -> assertThat(cause.message()).contains("Unknown price tier"));
     }
 
     @Test
@@ -144,6 +151,9 @@ class SetPriceTest {
         failing.execute(new Request(UUID.randomUUID().toString(),
                                     "STANDARD",
                                     "49.50",
-                                    "USD")).await().onSuccess(r -> fail("Expected store failure")).onFailure(cause -> assertThat(cause).isInstanceOf(SetPrice.PricingError.StoreUnavailable.class));
+                                    "USD"))
+               .await()
+               .onSuccess(r -> fail("Expected store failure"))
+               .onFailure(cause -> assertThat(cause).isInstanceOf(SetPrice.PricingError.StoreUnavailable.class));
     }
 }

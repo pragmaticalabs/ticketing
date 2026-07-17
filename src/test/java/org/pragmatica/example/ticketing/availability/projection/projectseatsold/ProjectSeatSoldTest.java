@@ -1,15 +1,15 @@
 package org.pragmatica.example.ticketing.availability.projection.projectseatsold;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
 import org.pragmatica.lang.Option;
 import org.pragmatica.lang.Promise;
 import org.pragmatica.lang.Unit;
 import org.pragmatica.lang.utils.Causes;
 import org.pragmatica.example.ticketing.availability.projection.SeatProjectionStore;
 import org.pragmatica.example.ticketing.shared.event.SeatSold;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
@@ -52,13 +52,20 @@ class ProjectSeatSoldTest {
 
         projection.execute(new SeatSold(seat.toString(),
                                         event.toString(),
-                                        UUID.randomUUID().toString())).await().onFailure(cause -> fail(cause.message()));
-        store.statusOf(seat).onEmpty(() -> fail("Expected projected status")).onPresent(status -> assertThat(status).isEqualTo("sold"));
+                                        UUID.randomUUID().toString()))
+                  .await()
+                  .onFailure(cause -> fail(cause.message()));
+        store.statusOf(seat)
+             .onEmpty(() -> fail("Expected projected status"))
+             .onPresent(status -> assertThat(status).isEqualTo("sold"));
     }
 
     @Test
     void execute_malformedFact_recoversToUnit() {
-        projection.execute(new SeatSold("not-a-uuid", "not-a-uuid", "x")).await().onFailure(cause -> fail("Expected recovery to Unit")).onSuccess(u -> assertThat(u).isEqualTo(Unit.unit()));
+        projection.execute(new SeatSold("not-a-uuid", "not-a-uuid", "x"))
+                  .await()
+                  .onFailure(cause -> fail("Expected recovery to Unit"))
+                  .onSuccess(u -> assertThat(u).isEqualTo(Unit.unit()));
     }
 
     @Test
@@ -67,6 +74,9 @@ class ProjectSeatSoldTest {
 
         failing.execute(new SeatSold(UUID.randomUUID().toString(),
                                      UUID.randomUUID().toString(),
-                                     UUID.randomUUID().toString())).await().onFailure(cause -> fail("Expected recovery to Unit")).onSuccess(u -> assertThat(u).isEqualTo(Unit.unit()));
+                                     UUID.randomUUID().toString()))
+               .await()
+               .onFailure(cause -> fail("Expected recovery to Unit"))
+               .onSuccess(u -> assertThat(u).isEqualTo(Unit.unit()));
     }
 }

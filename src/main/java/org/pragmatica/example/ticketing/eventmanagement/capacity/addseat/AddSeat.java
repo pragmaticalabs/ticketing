@@ -94,8 +94,9 @@ public interface AddSeat {
                                         valid.location().section(),
                                         valid.location().row(),
                                         valid.location().number(),
-                                        valid.tier().name()).mapError(_ -> AddSeatError.storeUnavailable())
-                                       .map(_ -> new Response(uuid.toString()));
+                                        valid.tier().name())
+                            .mapError(_ -> AddSeatError.storeUnavailable())
+                            .map(_ -> new Response(uuid.toString()));
             }
         }
 

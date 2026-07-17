@@ -1,8 +1,8 @@
 package org.pragmatica.example.ticketing.booking.hold.checkhold;
 
-import org.pragmatica.example.ticketing.booking.InMemoryBookingStore;
-
 import java.util.UUID;
+
+import org.pragmatica.example.ticketing.booking.InMemoryBookingStore;
 
 import org.junit.jupiter.api.Test;
 
@@ -24,11 +24,19 @@ class CheckHoldTest {
         var slice = buildSlice(store);
         var seat = UUID.randomUUID().toString();
 
-        store.claimSeat(UUID.randomUUID(), UUID.fromString(seat), UUID.randomUUID(), UUID.randomUUID()).await().onFailure(cause -> fail(cause.message()));
-        slice.execute(new CheckHold.Request(seat)).await().onFailure(cause -> fail(cause.message())).onSuccess(response -> {
-            assertThat(response.seat()).isEqualTo(seat);
-            assertThat(response.state()).isEqualTo("FRESH");
-        });
+        store.claimSeat(UUID.randomUUID(),
+                        UUID.fromString(seat),
+                        UUID.randomUUID(),
+                        UUID.randomUUID())
+             .await()
+             .onFailure(cause -> fail(cause.message()));
+        slice.execute(new CheckHold.Request(seat))
+             .await()
+             .onFailure(cause -> fail(cause.message()))
+             .onSuccess(response -> {
+                            assertThat(response.seat()).isEqualTo(seat);
+                            assertThat(response.state()).isEqualTo("FRESH");
+                        });
     }
 
     @Test
@@ -37,8 +45,16 @@ class CheckHoldTest {
         var slice = buildSlice(store);
         var seat = UUID.randomUUID().toString();
 
-        store.claimSeat(UUID.randomUUID(), UUID.fromString(seat), UUID.randomUUID(), UUID.randomUUID()).await().onFailure(cause -> fail(cause.message()));
-        slice.execute(new CheckHold.Request(seat)).await().onFailure(cause -> fail(cause.message())).onSuccess(response -> assertThat(response.state()).isEqualTo("STALE"));
+        store.claimSeat(UUID.randomUUID(),
+                        UUID.fromString(seat),
+                        UUID.randomUUID(),
+                        UUID.randomUUID())
+             .await()
+             .onFailure(cause -> fail(cause.message()));
+        slice.execute(new CheckHold.Request(seat))
+             .await()
+             .onFailure(cause -> fail(cause.message()))
+             .onSuccess(response -> assertThat(response.state()).isEqualTo("STALE"));
     }
 
     @Test
@@ -47,14 +63,25 @@ class CheckHoldTest {
         var slice = buildSlice(store);
         var seat = UUID.randomUUID().toString();
 
-        store.claimSeat(UUID.randomUUID(), UUID.fromString(seat), UUID.randomUUID(), UUID.randomUUID()).await().onFailure(cause -> fail(cause.message()));
-        slice.execute(new CheckHold.Request(seat)).await().onFailure(cause -> fail(cause.message())).onSuccess(response -> assertThat(response.state()).isEqualTo("EXPIRED"));
+        store.claimSeat(UUID.randomUUID(),
+                        UUID.fromString(seat),
+                        UUID.randomUUID(),
+                        UUID.randomUUID())
+             .await()
+             .onFailure(cause -> fail(cause.message()));
+        slice.execute(new CheckHold.Request(seat))
+             .await()
+             .onFailure(cause -> fail(cause.message()))
+             .onSuccess(response -> assertThat(response.state()).isEqualTo("EXPIRED"));
     }
 
     @Test
     void execute_unknownSeat_returnsNone() {
         var slice = buildSlice(new InMemoryBookingStore());
 
-        slice.execute(new CheckHold.Request(UUID.randomUUID().toString())).await().onFailure(cause -> fail(cause.message())).onSuccess(response -> assertThat(response.state()).isEqualTo("NONE"));
+        slice.execute(new CheckHold.Request(UUID.randomUUID().toString()))
+             .await()
+             .onFailure(cause -> fail(cause.message()))
+             .onSuccess(response -> assertThat(response.state()).isEqualTo("NONE"));
     }
 }

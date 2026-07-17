@@ -38,9 +38,10 @@ public interface ProjectSeatSold {
             @Override
             public Promise<Unit> execute(SeatSold event) {
                 return ValidSeatRef.validSeatRef(event.seatId(),
-                                                 event.eventId()).async()
-                                                .flatMap(this::convergeSold)
-                                                .recover(_ -> Unit.unit());
+                                                 event.eventId())
+                                   .async()
+                                   .flatMap(this::convergeSold)
+                                   .recover(_ -> Unit.unit());
             }
 
             private Promise<Unit> convergeSold(ValidSeatRef ref) {

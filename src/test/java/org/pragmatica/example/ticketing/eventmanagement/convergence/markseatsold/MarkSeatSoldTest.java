@@ -1,5 +1,9 @@
 package org.pragmatica.example.ticketing.eventmanagement.convergence.markseatsold;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
 import org.pragmatica.lang.Cause;
 import org.pragmatica.lang.Option;
 import org.pragmatica.lang.Promise;
@@ -9,10 +13,6 @@ import org.pragmatica.example.ticketing.eventmanagement.EventStore;
 import org.pragmatica.example.ticketing.eventmanagement.EventStore.EventRow;
 import org.pragmatica.example.ticketing.eventmanagement.EventStore.RowId;
 import org.pragmatica.example.ticketing.shared.event.SeatSold;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
@@ -164,7 +164,9 @@ class MarkSeatSoldTest {
         store.insertSeat(seat, UUID.randomUUID(), "A", "12", 7, "STANDARD").await();
         slice.execute(new SeatSold(seat.toString(),
                                    UUID.randomUUID().toString(),
-                                   UUID.randomUUID().toString())).await().onFailure(cause -> fail(cause.message()));
+                                   UUID.randomUUID().toString()))
+             .await()
+             .onFailure(cause -> fail(cause.message()));
         assertThat(store.seatStatusOf(seat)).isEqualTo("sold");
     }
 
@@ -172,7 +174,9 @@ class MarkSeatSoldTest {
     void execute_malformedFact_recoversToUnit() {
         slice.execute(new SeatSold("not-a-uuid",
                                    UUID.randomUUID().toString(),
-                                   UUID.randomUUID().toString())).await().onFailure(cause -> fail(cause.message()));
+                                   UUID.randomUUID().toString()))
+             .await()
+             .onFailure(cause -> fail(cause.message()));
     }
 
     @Test
@@ -181,6 +185,8 @@ class MarkSeatSoldTest {
 
         failing.execute(new SeatSold(UUID.randomUUID().toString(),
                                      UUID.randomUUID().toString(),
-                                     UUID.randomUUID().toString())).await().onFailure(cause -> fail(cause.message()));
+                                     UUID.randomUUID().toString()))
+               .await()
+               .onFailure(cause -> fail(cause.message()));
     }
 }

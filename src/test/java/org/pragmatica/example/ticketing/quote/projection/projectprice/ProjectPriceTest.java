@@ -1,14 +1,14 @@
 package org.pragmatica.example.ticketing.quote.projection.projectprice;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
 import org.pragmatica.lang.Option;
 import org.pragmatica.lang.Promise;
 import org.pragmatica.lang.Unit;
 import org.pragmatica.lang.utils.Causes;
 import org.pragmatica.example.ticketing.shared.event.PriceChanged;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
@@ -44,7 +44,9 @@ class ProjectPriceTest {
         }
 
         private static PriceRow monotonic(PriceRow existing, PriceRow incoming) {
-            return incoming.version() > existing.version() ? incoming : existing;
+            return incoming.version() > existing.version()
+                   ? incoming
+                   : existing;
         }
     }
 
@@ -68,13 +70,16 @@ class ProjectPriceTest {
     void execute_priceChanged_storesProjection() {
         var event = UUID.randomUUID().toString();
 
-        slice.execute(new PriceChanged(event, "seat-1", "STANDARD", 4950, "USD", 1)).await().onFailure(cause -> fail(cause.message()));
-        store.rowOf(event + ":STANDARD").onEmpty(() -> fail("Expected stored projection"))
-                                        .onPresent(row -> {
-                                                       assertThat(row.amountMinor()).isEqualTo(4950);
-                                                       assertThat(row.currency()).isEqualTo("USD");
-                                                       assertThat(row.version()).isEqualTo(1);
-                                                   });
+        slice.execute(new PriceChanged(event, "seat-1", "STANDARD", 4950, "USD", 1))
+             .await()
+             .onFailure(cause -> fail(cause.message()));
+        store.rowOf(event + ":STANDARD")
+             .onEmpty(() -> fail("Expected stored projection"))
+             .onPresent(row -> {
+                            assertThat(row.amountMinor()).isEqualTo(4950);
+                            assertThat(row.currency()).isEqualTo("USD");
+                            assertThat(row.version()).isEqualTo(1);
+                        });
     }
 
     @Test
@@ -86,24 +91,33 @@ class ProjectPriceTest {
                                          "STANDARD",
                                          4950,
                                          "USD",
-                                         1)).await().onFailure(cause -> fail("Expected recovery to Unit"));
+                                         1))
+               .await()
+               .onFailure(cause -> fail("Expected recovery to Unit"));
     }
 
     @Test
     void execute_malformedFact_recoversToUnit() {
-        slice.execute(new PriceChanged("not-a-uuid", "seat-1", "STANDARD", 4950, "USD", 1)).await().onFailure(cause -> fail("Expected recovery to Unit"));
+        slice.execute(new PriceChanged("not-a-uuid", "seat-1", "STANDARD", 4950, "USD", 1))
+             .await()
+             .onFailure(cause -> fail("Expected recovery to Unit"));
     }
 
     @Test
     void execute_staleVersion_leavesRowUnchanged() {
         var event = UUID.randomUUID().toString();
 
-        slice.execute(new PriceChanged(event, "seat-1", "STANDARD", 5500, "USD", 2)).await().onFailure(cause -> fail(cause.message()));
-        slice.execute(new PriceChanged(event, "seat-1", "STANDARD", 5000, "USD", 1)).await().onFailure(cause -> fail(cause.message()));
-        store.rowOf(event + ":STANDARD").onEmpty(() -> fail("Expected stored projection"))
-                                        .onPresent(row -> {
-                                                       assertThat(row.amountMinor()).isEqualTo(5500);
-                                                       assertThat(row.version()).isEqualTo(2);
-                                                   });
+        slice.execute(new PriceChanged(event, "seat-1", "STANDARD", 5500, "USD", 2))
+             .await()
+             .onFailure(cause -> fail(cause.message()));
+        slice.execute(new PriceChanged(event, "seat-1", "STANDARD", 5000, "USD", 1))
+             .await()
+             .onFailure(cause -> fail(cause.message()));
+        store.rowOf(event + ":STANDARD")
+             .onEmpty(() -> fail("Expected stored projection"))
+             .onPresent(row -> {
+                 assertThat(row.amountMinor()).isEqualTo(5500);
+                 assertThat(row.version()).isEqualTo(2);
+             });
     }
 }

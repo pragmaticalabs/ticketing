@@ -1,9 +1,9 @@
 package org.pragmatica.example.ticketing.shared;
 
+import java.util.Locale;
+
 import org.pragmatica.lang.Cause;
 import org.pragmatica.lang.Result;
-
-import java.util.Locale;
 
 
 public enum PriceTier {

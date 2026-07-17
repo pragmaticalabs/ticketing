@@ -1,13 +1,13 @@
 package org.pragmatica.example.ticketing.shared;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.Locale;
+
 import org.pragmatica.lang.Cause;
 import org.pragmatica.lang.Result;
 import org.pragmatica.lang.Verify;
 import org.pragmatica.lang.parse.Number;
-
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.util.Locale;
 
 
 /// Non-negative monetary amount in minor units. A record's canonical constructor is unavoidably

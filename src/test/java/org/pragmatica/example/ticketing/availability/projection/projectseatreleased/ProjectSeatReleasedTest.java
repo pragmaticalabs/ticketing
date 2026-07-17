@@ -1,15 +1,15 @@
 package org.pragmatica.example.ticketing.availability.projection.projectseatreleased;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
 import org.pragmatica.lang.Option;
 import org.pragmatica.lang.Promise;
 import org.pragmatica.lang.Unit;
 import org.pragmatica.lang.utils.Causes;
 import org.pragmatica.example.ticketing.availability.projection.SeatProjectionStore;
 import org.pragmatica.example.ticketing.shared.event.SeatReleased;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
@@ -51,13 +51,21 @@ class ProjectSeatReleasedTest {
         var event = UUID.randomUUID();
 
         store.upsertStatus(seat, event, "sold").await();
-        projection.execute(new SeatReleased(seat.toString(), event.toString())).await().onFailure(cause -> fail(cause.message()));
-        store.statusOf(seat).onEmpty(() -> fail("Expected projected status")).onPresent(status -> assertThat(status).isEqualTo("available"));
+        projection.execute(new SeatReleased(seat.toString(),
+                                            event.toString()))
+                  .await()
+                  .onFailure(cause -> fail(cause.message()));
+        store.statusOf(seat)
+             .onEmpty(() -> fail("Expected projected status"))
+             .onPresent(status -> assertThat(status).isEqualTo("available"));
     }
 
     @Test
     void execute_malformedFact_recoversToUnit() {
-        projection.execute(new SeatReleased("not-a-uuid", "not-a-uuid")).await().onFailure(cause -> fail("Expected recovery to Unit")).onSuccess(u -> assertThat(u).isEqualTo(Unit.unit()));
+        projection.execute(new SeatReleased("not-a-uuid", "not-a-uuid"))
+                  .await()
+                  .onFailure(cause -> fail("Expected recovery to Unit"))
+                  .onSuccess(u -> assertThat(u).isEqualTo(Unit.unit()));
     }
 
     @Test
@@ -65,6 +73,9 @@ class ProjectSeatReleasedTest {
         var failing = ProjectSeatReleased.projectSeatReleased(new FailingStore());
 
         failing.execute(new SeatReleased(UUID.randomUUID().toString(),
-                                         UUID.randomUUID().toString())).await().onFailure(cause -> fail("Expected recovery to Unit")).onSuccess(u -> assertThat(u).isEqualTo(Unit.unit()));
+                                         UUID.randomUUID().toString()))
+               .await()
+               .onFailure(cause -> fail("Expected recovery to Unit"))
+               .onSuccess(u -> assertThat(u).isEqualTo(Unit.unit()));
     }
 }

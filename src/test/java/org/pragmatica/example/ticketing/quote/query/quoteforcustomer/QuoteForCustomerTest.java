@@ -1,14 +1,14 @@
 package org.pragmatica.example.ticketing.quote.query.quoteforcustomer;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
 import org.pragmatica.lang.Option;
 import org.pragmatica.lang.Promise;
 import org.pragmatica.lang.utils.Causes;
 import org.pragmatica.example.ticketing.quote.query.quoteforcustomer.QuoteViewStore.PriceRow;
 import org.pragmatica.example.ticketing.quote.query.quoteforcustomer.QuoteForCustomer.Request;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
@@ -47,21 +47,30 @@ class QuoteForCustomerTest {
         var event = UUID.randomUUID().toString();
 
         store.seed(event + ":STANDARD", new PriceRow(4950, "USD", "STANDARD", 1));
-        slice.execute(new Request(event, "STANDARD")).await().onFailure(cause -> fail(cause.message())).onSuccess(r -> {
-            assertThat(r.amountMinor()).isEqualTo(4950);
-            assertThat(r.currency()).isEqualTo("USD");
-        });
+        slice.execute(new Request(event, "STANDARD"))
+             .await()
+             .onFailure(cause -> fail(cause.message()))
+             .onSuccess(r -> {
+                 assertThat(r.amountMinor()).isEqualTo(4950);
+                 assertThat(r.currency()).isEqualTo("USD");
+             });
     }
 
     @Test
     void execute_noPrice_returnsPriceNotFound() {
         slice.execute(new Request(UUID.randomUUID().toString(),
-                                  "STANDARD")).await().onSuccess(r -> fail("Expected PriceNotFound")).onFailure(cause -> assertThat(cause.message()).contains("No price"));
+                                  "STANDARD"))
+             .await()
+             .onSuccess(r -> fail("Expected PriceNotFound"))
+             .onFailure(cause -> assertThat(cause.message()).contains("No price"));
     }
 
     @Test
     void execute_malformedEvent_returnsError() {
-        slice.execute(new Request("not-a-uuid", "STANDARD")).await().onSuccess(r -> fail("Expected validation failure")).onFailure(cause -> assertThat(cause.message()).contains("valid UUID"));
+        slice.execute(new Request("not-a-uuid", "STANDARD"))
+             .await()
+             .onSuccess(r -> fail("Expected validation failure"))
+             .onFailure(cause -> assertThat(cause.message()).contains("valid UUID"));
     }
 
     @Test
@@ -69,6 +78,9 @@ class QuoteForCustomerTest {
         var failing = QuoteForCustomer.quoteForCustomer(new FailingStore());
 
         failing.execute(new Request(UUID.randomUUID().toString(),
-                                    "STANDARD")).await().onSuccess(r -> fail("Expected store failure")).onFailure(cause -> assertThat(cause).isInstanceOf(QuoteForCustomer.QuoteError.StoreUnavailable.class));
+                                    "STANDARD"))
+               .await()
+               .onSuccess(r -> fail("Expected store failure"))
+               .onFailure(cause -> assertThat(cause).isInstanceOf(QuoteForCustomer.QuoteError.StoreUnavailable.class));
     }
 }

@@ -1,12 +1,12 @@
 package org.pragmatica.example.ticketing.booking;
 
+import java.util.List;
+import java.util.UUID;
+
 import org.pragmatica.lang.Option;
 import org.pragmatica.lang.Promise;
 import org.pragmatica.lang.Unit;
 import org.pragmatica.lang.utils.Causes;
-
-import java.util.List;
-import java.util.UUID;
 
 
 /// Fault-injecting fake store: a faithful {@link InMemoryBookingStore} that fails exactly one named

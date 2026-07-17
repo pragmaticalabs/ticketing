@@ -1,9 +1,9 @@
 package org.pragmatica.example.ticketing.shared;
 
+import java.util.Locale;
+
 import org.pragmatica.lang.Cause;
 import org.pragmatica.lang.Result;
-
-import java.util.Locale;
 
 
 /// Seat lifecycle state machine: a seat is AVAILABLE, may be BLOCKED (held back from sale), becomes

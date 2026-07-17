@@ -1,5 +1,11 @@
 package org.pragmatica.example.ticketing.booking;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
 import org.pragmatica.aether.resource.http.HttpClient;
 import org.pragmatica.aether.resource.http.HttpClientConfig;
 import org.pragmatica.http.HttpResult;
@@ -10,12 +16,6 @@ import org.pragmatica.lang.type.TypeToken;
 import org.pragmatica.lang.utils.Causes;
 import org.pragmatica.example.ticketing.booking.cancellation.cancelticket.CancelTicket;
 import org.pragmatica.example.ticketing.booking.purchase.buyticket.BuyTicket;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
 
 
 /// Shared fake payment gateway for the booking slice tests: the slices only use
@@ -39,7 +39,6 @@ public record FakeGateway(boolean approved, Set<String> failUrls, List<String> c
     @SuppressWarnings("unchecked")
     public <T> Promise<T> postJson(String url, Object body, Class<T> type) {
         calls.add(url);
-
         if (failUrls.contains(url)) {
             return unused();
         }

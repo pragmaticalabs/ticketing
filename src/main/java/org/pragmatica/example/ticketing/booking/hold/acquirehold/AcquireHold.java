@@ -1,5 +1,7 @@
 package org.pragmatica.example.ticketing.booking.hold.acquirehold;
 
+import java.util.UUID;
+
 import org.pragmatica.aether.resource.db.PgSql;
 import org.pragmatica.aether.slice.annotation.Slice;
 import org.pragmatica.lang.Cause;
@@ -9,8 +11,6 @@ import org.pragmatica.example.ticketing.booking.BookingStore;
 import org.pragmatica.example.ticketing.shared.CustomerId;
 import org.pragmatica.example.ticketing.shared.EventId;
 import org.pragmatica.example.ticketing.shared.SeatId;
-
-import java.util.UUID;
 
 
 /// Use case: claim a seat with a decaying 15-minute hold (FER). Telescope leaf -- system
@@ -97,10 +97,11 @@ public interface AcquireHold {
                 return store.claimSeat(reservationId,
                                        valid.seatUuid(),
                                        valid.eventUuid(),
-                                       valid.customerUuid()).mapError(_ -> AcquireError.storeUnavailable())
-                                      .flatMap(claimed -> claimed.async(AcquireError.seatUnavailable()))
-                                      .map(_ -> new Response(reservationId.toString(),
-                                                             "FRESH"));
+                                       valid.customerUuid())
+                            .mapError(_ -> AcquireError.storeUnavailable())
+                            .flatMap(claimed -> claimed.async(AcquireError.seatUnavailable()))
+                            .map(_ -> new Response(reservationId.toString(),
+                                                   "FRESH"));
             }
         }
 

@@ -1,14 +1,14 @@
 package org.pragmatica.example.ticketing.booking;
 
-import org.pragmatica.lang.Option;
-import org.pragmatica.lang.Promise;
-import org.pragmatica.lang.Unit;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
+import org.pragmatica.lang.Option;
+import org.pragmatica.lang.Promise;
+import org.pragmatica.lang.Unit;
 
 
 /// Shared in-memory fake of the @PgSql {@link BookingStore}, used by every booking slice test. The
@@ -28,19 +28,15 @@ public class InMemoryBookingStore implements BookingStore {
         FRESH(false, false),
         STALE(false, true),
         EXPIRED(true, true);
-
         private final boolean expired;
         private final boolean stale;
-
         Decay(boolean expired, boolean stale) {
             this.expired = expired;
             this.stale = stale;
         }
-
         boolean expired() {
             return expired;
         }
-
         boolean stale() {
             return stale;
         }
@@ -54,11 +50,13 @@ public class InMemoryBookingStore implements BookingStore {
     private final Map<UUID, StoredBooking> bookings = new HashMap<>();
     private final Map<UUID, String> tickets = new HashMap<>();
     private final Map<UUID, String> payments = new HashMap<>();
+
     private Decay decay = Decay.FRESH;
 
     /// Set the decay state reported by {@link #holdDecay(UUID)}; fluent so a store can be built inline.
     public InMemoryBookingStore withDecay(Decay decay) {
         this.decay = decay;
+
         return this;
     }
 
@@ -180,9 +178,12 @@ public class InMemoryBookingStore implements BookingStore {
     public Promise<List<SeatRef>> expireHolds() {
         var freed = new ArrayList<SeatRef>();
 
-        reservationsBySeat.values().stream().filter(reservation -> reservation.state()
-                                                                              .equals("held")).forEach(reservation -> freed.add(new SeatRef(reservation.seatId(),
-                                                                                                                                            reservation.eventId())));
+        reservationsBySeat.values()
+                          .stream()
+                          .filter(reservation -> reservation.state()
+                                                            .equals("held"))
+                          .forEach(reservation -> freed.add(new SeatRef(reservation.seatId(),
+                                                                        reservation.eventId())));
         freed.forEach(seat -> reservationsBySeat.put(seat.seatId(),
                                                      withState(reservationsBySeat.get(seat.seatId()),
                                                                "expired")));

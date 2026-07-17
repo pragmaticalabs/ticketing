@@ -1,5 +1,9 @@
 package org.pragmatica.example.ticketing.eventmanagement.lifecycle.openevent;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
 import org.pragmatica.lang.Cause;
 import org.pragmatica.lang.Option;
 import org.pragmatica.lang.Promise;
@@ -9,10 +13,6 @@ import org.pragmatica.example.ticketing.eventmanagement.EventStore;
 import org.pragmatica.example.ticketing.eventmanagement.EventStore.EventRow;
 import org.pragmatica.example.ticketing.eventmanagement.EventStore.RowId;
 import org.pragmatica.example.ticketing.eventmanagement.lifecycle.openevent.OpenEvent.Request;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
@@ -168,12 +168,18 @@ class OpenEventTest {
         var id = UUID.randomUUID();
 
         store.insertEvent(id, "Wembley Arena", "2026-07-01T19:00:00Z").await();
-        slice.execute(new Request(id.toString())).await().onFailure(cause -> fail(cause.message())).onSuccess(response -> assertThat(response.event()).isEqualTo(id.toString()));
+        slice.execute(new Request(id.toString()))
+             .await()
+             .onFailure(cause -> fail(cause.message()))
+             .onSuccess(response -> assertThat(response.event()).isEqualTo(id.toString()));
     }
 
     @Test
     void execute_unknownEvent_returnsEventNotFound() {
-        slice.execute(new Request(UUID.randomUUID().toString())).await().onSuccess(response -> fail("Expected EventNotFound")).onFailure(cause -> assertThat(cause.message()).contains("not found"));
+        slice.execute(new Request(UUID.randomUUID().toString()))
+             .await()
+             .onSuccess(response -> fail("Expected EventNotFound"))
+             .onFailure(cause -> assertThat(cause.message()).contains("not found"));
     }
 
     @Test
@@ -182,18 +188,27 @@ class OpenEventTest {
 
         store.insertEvent(id, "Wembley Arena", "2026-07-01T19:00:00Z").await();
         slice.execute(new Request(id.toString())).await();
-        slice.execute(new Request(id.toString())).await().onSuccess(response -> fail("Expected AlreadyOpen")).onFailure(cause -> assertThat(cause.message()).contains("already open"));
+        slice.execute(new Request(id.toString()))
+             .await()
+             .onSuccess(response -> fail("Expected AlreadyOpen"))
+             .onFailure(cause -> assertThat(cause.message()).contains("already open"));
     }
 
     @Test
     void execute_malformedId_returnsValidationFailure() {
-        slice.execute(new Request("not-a-uuid")).await().onSuccess(response -> fail("Expected validation failure")).onFailure(cause -> assertThat(cause.message()).contains("valid UUID"));
+        slice.execute(new Request("not-a-uuid"))
+             .await()
+             .onSuccess(response -> fail("Expected validation failure"))
+             .onFailure(cause -> assertThat(cause.message()).contains("valid UUID"));
     }
 
     @Test
     void execute_storeFails_returnsStoreUnavailable() {
         var failing = OpenEvent.openEvent(new FailingStore());
 
-        failing.execute(new Request(UUID.randomUUID().toString())).await().onSuccess(response -> fail("Expected StoreUnavailable")).onFailure(cause -> assertThat(cause.message()).contains("unavailable"));
+        failing.execute(new Request(UUID.randomUUID().toString()))
+               .await()
+               .onSuccess(response -> fail("Expected StoreUnavailable"))
+               .onFailure(cause -> assertThat(cause.message()).contains("unavailable"));
     }
 }

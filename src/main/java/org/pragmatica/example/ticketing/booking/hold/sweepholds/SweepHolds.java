@@ -1,5 +1,7 @@
 package org.pragmatica.example.ticketing.booking.hold.sweepholds;
 
+import java.util.List;
+
 import org.pragmatica.aether.resource.db.PgSql;
 import org.pragmatica.aether.slice.Publisher;
 import org.pragmatica.aether.slice.annotation.Slice;
@@ -10,8 +12,6 @@ import org.pragmatica.example.ticketing.booking.BookingStore;
 import org.pragmatica.example.ticketing.booking.BookingStore.SeatRef;
 import org.pragmatica.example.ticketing.shared.event.SeatReleased;
 import org.pragmatica.example.ticketing.shared.event.SeatReleasedPublisher;
-
-import java.util.List;
 
 
 /// Use case: sweep expired holds and free their seats. Telescope leaf -- system `ticketing` ->

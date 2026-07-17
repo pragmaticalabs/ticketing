@@ -1,5 +1,9 @@
 package org.pragmatica.example.ticketing.pricing.quoting.quoteprice;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
 import org.pragmatica.lang.Option;
 import org.pragmatica.lang.Promise;
 import org.pragmatica.lang.Unit;
@@ -7,10 +11,6 @@ import org.pragmatica.lang.utils.Causes;
 import org.pragmatica.example.ticketing.pricing.PricingStore;
 import org.pragmatica.example.ticketing.pricing.PricingStore.PriceRow;
 import org.pragmatica.example.ticketing.pricing.quoting.quoteprice.QuotePrice.Request;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
@@ -26,11 +26,7 @@ class QuotePriceTest {
         // Allocate the next version for (event, tier) as max-existing + 1 (starting at 1), like the
         // real append-only price_events log, and return it.
         @Override
-        public Promise<Long> appendPrice(UUID id,
-                                         UUID eventId,
-                                         String tier,
-                                         long amountMinor,
-                                         String currency) {
+        public Promise<Long> appendPrice(UUID id, UUID eventId, String tier, long amountMinor, String currency) {
             return Promise.success(versions.merge(eventId + ":" + tier, 1L, (existing, increment) -> existing + 1L));
         }
 
@@ -55,11 +51,7 @@ class QuotePriceTest {
     // Store whose every operation fails, to simulate the pricing store being unavailable.
     private static final class FailingStore implements PricingStore {
         @Override
-        public Promise<Long> appendPrice(UUID id,
-                                         UUID eventId,
-                                         String tier,
-                                         long amountMinor,
-                                         String currency) {
+        public Promise<Long> appendPrice(UUID id, UUID eventId, String tier, long amountMinor, String currency) {
             return Causes.cause("pricing store unavailable").promise();
         }
 
@@ -87,21 +79,30 @@ class QuotePriceTest {
         var event = UUID.randomUUID().toString();
 
         store.upsertCurrent(event + ":STANDARD", UUID.fromString(event), "STANDARD", 4950, "USD", 1).await();
-        slice.execute(new Request(event, "STANDARD")).await().onFailure(cause -> fail(cause.message())).onSuccess(r -> {
-            assertThat(r.amountMinor()).isEqualTo(4950);
-            assertThat(r.currency()).isEqualTo("USD");
-        });
+        slice.execute(new Request(event, "STANDARD"))
+             .await()
+             .onFailure(cause -> fail(cause.message()))
+             .onSuccess(r -> {
+                 assertThat(r.amountMinor()).isEqualTo(4950);
+                 assertThat(r.currency()).isEqualTo("USD");
+             });
     }
 
     @Test
     void execute_noPrice_returnsPriceNotFound() {
         slice.execute(new Request(UUID.randomUUID().toString(),
-                                  "STANDARD")).await().onSuccess(r -> fail("Expected PriceNotFound")).onFailure(cause -> assertThat(cause.message()).contains("No price"));
+                                  "STANDARD"))
+             .await()
+             .onSuccess(r -> fail("Expected PriceNotFound"))
+             .onFailure(cause -> assertThat(cause.message()).contains("No price"));
     }
 
     @Test
     void execute_malformedEvent_returnsError() {
-        slice.execute(new Request("not-a-uuid", "STANDARD")).await().onSuccess(r -> fail("Expected validation failure")).onFailure(cause -> assertThat(cause.message()).contains("valid UUID"));
+        slice.execute(new Request("not-a-uuid", "STANDARD"))
+             .await()
+             .onSuccess(r -> fail("Expected validation failure"))
+             .onFailure(cause -> assertThat(cause.message()).contains("valid UUID"));
     }
 
     @Test
@@ -109,6 +110,9 @@ class QuotePriceTest {
         var failing = QuotePrice.quotePrice(new FailingStore());
 
         failing.execute(new Request(UUID.randomUUID().toString(),
-                                    "STANDARD")).await().onSuccess(r -> fail("Expected store failure")).onFailure(cause -> assertThat(cause).isInstanceOf(QuotePrice.QuoteError.StoreUnavailable.class));
+                                    "STANDARD"))
+               .await()
+               .onSuccess(r -> fail("Expected store failure"))
+               .onFailure(cause -> assertThat(cause).isInstanceOf(QuotePrice.QuoteError.StoreUnavailable.class));
     }
 }

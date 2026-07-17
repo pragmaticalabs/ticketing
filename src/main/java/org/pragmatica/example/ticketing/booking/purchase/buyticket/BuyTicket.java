@@ -1,5 +1,8 @@
 package org.pragmatica.example.ticketing.booking.purchase.buyticket;
 
+import java.util.List;
+import java.util.UUID;
+
 import org.pragmatica.aether.resource.db.PgSql;
 import org.pragmatica.aether.resource.http.Http;
 import org.pragmatica.aether.resource.http.HttpClient;
@@ -25,9 +28,6 @@ import org.pragmatica.example.ticketing.shared.SeatId;
 import org.pragmatica.example.ticketing.shared.TicketId;
 import org.pragmatica.example.ticketing.shared.event.SeatSold;
 import org.pragmatica.example.ticketing.shared.event.SeatSoldPublisher;
-
-import java.util.List;
-import java.util.UUID;
 
 
 /// Use case: buy a ticket for a seat (the BER-saga centerpiece). Telescope leaf -- system
@@ -343,10 +343,11 @@ public interface BuyTicket {
             // JBCT pattern: Leaf -- synchronous authoritative price read from the pricing slice.
             private Promise<PricedBuy> priceBuy(ValidBuy valid) {
                 return quotePrice.execute(new QuotePrice.Request(valid.eventStr(),
-                                                                 valid.tierStr())).mapError(_ -> BuyError.priceUnavailable())
-                                         .map(price -> new PricedBuy(valid,
-                                                                     price.amountMinor(),
-                                                                     price.currency()));
+                                                                 valid.tierStr()))
+                                 .mapError(_ -> BuyError.priceUnavailable())
+                                 .map(price -> new PricedBuy(valid,
+                                                             price.amountMinor(),
+                                                             price.currency()));
             }
 
             // JBCT pattern: Leaf -- design-out seat claim; an empty projection means the seat is taken.
@@ -356,9 +357,10 @@ public interface BuyTicket {
                 return store.claimSeat(reservationId,
                                        priced.buy().seatUuid(),
                                        priced.buy().eventUuid(),
-                                       priced.buy().customerUuid()).mapError(_ -> BuyError.storeUnavailable())
-                                      .flatMap(claimed -> claimed.async(BuyError.seatUnavailable()))
-                                      .map(_ -> new ReservedBuy(priced, reservationId));
+                                       priced.buy().customerUuid())
+                            .mapError(_ -> BuyError.storeUnavailable())
+                            .flatMap(claimed -> claimed.async(BuyError.seatUnavailable()))
+                            .map(_ -> new ReservedBuy(priced, reservationId));
             }
 
             // JBCT pattern: Aspects -- wrap the authorization in BER compensation; any failure releases
@@ -433,19 +435,20 @@ public interface BuyTicket {
 
                 return store.insertTicket(ticketId,
                                           bookingId,
-                                          authorized.buy().seatUuid()).flatMap(_ -> store.insertPayment(paymentId,
-                                                                                                        bookingId,
-                                                                                                        "authorized",
-                                                                                                        authorized.receiptId(),
-                                                                                                        authorized.amountMinor(),
-                                                                                                        authorized.currency()))
-                                         .flatMap(_ -> store.insertBooking(bookingId,
-                                                                           authorized.reservationId(),
-                                                                           authorized.buy().seatUuid(),
-                                                                           authorized.buy().eventUuid(),
-                                                                           authorized.buy().customerUuid(),
-                                                                           ticketId))
-                                         .mapError(_ -> BuyError.storeUnavailable());
+                                          authorized.buy().seatUuid())
+                            .flatMap(_ -> store.insertPayment(paymentId,
+                                                              bookingId,
+                                                              "authorized",
+                                                              authorized.receiptId(),
+                                                              authorized.amountMinor(),
+                                                              authorized.currency()))
+                            .flatMap(_ -> store.insertBooking(bookingId,
+                                                              authorized.reservationId(),
+                                                              authorized.buy().seatUuid(),
+                                                              authorized.buy().eventUuid(),
+                                                              authorized.buy().customerUuid(),
+                                                              ticketId))
+                            .mapError(_ -> BuyError.storeUnavailable());
             }
 
             // BER compensation for the confirm step: void the authorization and release the reservation,
@@ -464,8 +467,9 @@ public interface BuyTicket {
             private Promise<Unit> voidAuthorization(AuthorizedBuy authorized) {
                 return gateway.postJson("/void",
                                         new VoidRequest(authorized.receiptId().toString()),
-                                        VoidResult.class).mapToUnit()
-                                       .recover(_ -> Unit.unit());
+                                        VoidResult.class)
+                              .mapToUnit()
+                              .recover(_ -> Unit.unit());
             }
 
             // JBCT pattern: Sequencer -- best-effort notify (FER), then publish SeatSold and respond.

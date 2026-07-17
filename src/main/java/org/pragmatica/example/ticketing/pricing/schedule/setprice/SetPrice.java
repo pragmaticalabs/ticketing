@@ -1,5 +1,7 @@
 package org.pragmatica.example.ticketing.pricing.schedule.setprice;
 
+import java.util.UUID;
+
 import org.pragmatica.aether.resource.db.PgSql;
 import org.pragmatica.aether.slice.Publisher;
 import org.pragmatica.aether.slice.annotation.Slice;
@@ -12,8 +14,6 @@ import org.pragmatica.example.ticketing.shared.Money;
 import org.pragmatica.example.ticketing.shared.PriceTier;
 import org.pragmatica.example.ticketing.shared.event.PriceChanged;
 import org.pragmatica.example.ticketing.shared.event.PriceChangedPublisher;
-
-import java.util.UUID;
 
 
 /// Use case: set an absolute price for an (event, tier).
@@ -98,9 +98,10 @@ public interface SetPrice {
                                          write.eventId(),
                                          write.tierName(),
                                          write.amountMinor(),
-                                         write.currency()).mapError(_ -> PricingError.storeUnavailable())
-                                        .flatMap(version -> publishCommitted(write, version))
-                                        .map(Response::new);
+                                         write.currency())
+                            .mapError(_ -> PricingError.storeUnavailable())
+                            .flatMap(version -> publishCommitted(write, version))
+                            .map(Response::new);
             }
 
             // JBCT pattern: Sequencer -- upsert the projection, publish the change, carry the version.
@@ -110,9 +111,10 @@ public interface SetPrice {
                                            write.tierName(),
                                            write.amountMinor(),
                                            write.currency(),
-                                           version).mapError(_ -> PricingError.storeUnavailable())
-                                          .flatMap(_ -> publisher.publish(write.fact(version)))
-                                          .map(_ -> version);
+                                           version)
+                            .mapError(_ -> PricingError.storeUnavailable())
+                            .flatMap(_ -> publisher.publish(write.fact(version)))
+                            .map(_ -> version);
             }
         }
 

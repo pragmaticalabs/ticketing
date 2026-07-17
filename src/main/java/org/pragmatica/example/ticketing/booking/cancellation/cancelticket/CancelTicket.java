@@ -1,5 +1,7 @@
 package org.pragmatica.example.ticketing.booking.cancellation.cancelticket;
 
+import java.util.UUID;
+
 import org.pragmatica.aether.resource.db.PgSql;
 import org.pragmatica.aether.resource.http.Http;
 import org.pragmatica.aether.resource.http.HttpClient;
@@ -14,8 +16,6 @@ import org.pragmatica.example.ticketing.shared.BookingId;
 import org.pragmatica.example.ticketing.shared.CustomerId;
 import org.pragmatica.example.ticketing.shared.event.SeatReleased;
 import org.pragmatica.example.ticketing.shared.event.SeatReleasedPublisher;
-
-import java.util.UUID;
 
 
 /// Use case: cancel a confirmed booking and refund it. Telescope leaf -- system `ticketing` ->
@@ -241,9 +241,10 @@ public interface CancelTicket {
             private Promise<RefundedBooking> refund(LoadedBooking loaded) {
                 return gateway.postJson("/refund",
                                         new RefundRequest(loaded.bookingStr()),
-                                        RefundResult.class).mapError(_ -> CancelError.refundFailed())
-                                       .map(result -> new RefundedBooking(loaded,
-                                                                          result.receiptId()));
+                                        RefundResult.class)
+                              .mapError(_ -> CancelError.refundFailed())
+                              .map(result -> new RefundedBooking(loaded,
+                                                                 result.receiptId()));
             }
 
             // JBCT pattern: Leaf -- invalidate the ticket, carrying the immutable stage forward.
