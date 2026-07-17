@@ -193,12 +193,14 @@ jbct check src/main/java     # format + 41 lint rules (also: jbct format / jbct 
 ```
 
 - **Toolchain:** Java 25, Maven 3.9+. Pragmatica Lite / Aether / jbct artifacts are pinned to
-  **`1.0.0-rc2`** (the three `*.version` properties in `pom.xml`). The build depends on the two
-  slice-processor codegen fixes (route-import collision + codec FQN) — **merged** into
-  `release-1.0.0-rc2` via PR pragmaticalabs/pragmatica#364. `~/.m2` holds a locally-installed patched
-  `slice-processor:1.0.0-rc2` matching the merged source; if `~/.m2` is wiped before the official rc2
-  is republished, rebuild it: `mvn -pl jbct/slice-processor install -DskipTests` from a checkout of
-  `release-1.0.0-rc2`. (`jbct migrate` now exists on rc2 for future version bumps.)
+  **`1.0.0-rc2`** (the three `*.version` properties in `pom.xml`). **rc2 was published to Maven
+  Central on 2026-07-16** — including the official `slice-processor:1.0.0-rc2` with both codegen
+  fixes (route-import collision + codec FQN, PR pragmaticalabs/pragmatica#364), so the previously
+  hand-patched local jar is retired. **Exception: `resource-api` and `resource-notification` did NOT
+  make the release** — they must be locally installed from a `release-1.0.0-rc2` checkout
+  (`mvn install` under `aether/resource`) or the project won't resolve. The `jbct` CLI at `~/.jbct`
+  is **1.0.0-rc2** (upgraded 2026-07-17 from the Central `jbct-cli` dist; rc1 kept as
+  `jbct.jar.bak-2026-07-17` — note `jbct upgrade` checks a stale registry and can't self-update).
 - **basePackage:** `org.pragmatica.example.ticketing` (`jbct.toml`); line length 120, indent 4.
 - **Delegate Maven/test runs to the `build-runner` agent** — keep verbose output out of main context.
   Never run inline `mvn`/`jbct` for anything beyond a one-line status check.
@@ -245,7 +247,8 @@ AETHER CONTEXT (you have no built-in Aether knowledge — follow exactly):
   session resolves to these current globals.) Structural patterns are stable; for the freshest
   methodology and exact API signatures the **`../coding-technology/book/`** + **`/jbct` skill**
   (Core `1.0.0-rc1`) + real `org.pragmatica.lang.*` types are authoritative.
-- **Maven artifacts:** project pins **`1.0.0-rc2`** today (the three `*.version` properties in `pom.xml`; see §7).
+- **Maven artifacts:** project pins **`1.0.0-rc2`** (the three `*.version` properties in `pom.xml`;
+  on Maven Central since 2026-07-16 except `resource-api`/`resource-notification` — see §7).
 
 ---
 
@@ -282,7 +285,8 @@ AETHER CONTEXT (you have no built-in Aether knowledge — follow exactly):
 - **rc1 slice-toolchain gotchas (hard-won — see `docs/DESIGN.md` §8–§10 for the full list + the live
   posterchild that exercises them):** pg-codegen needs a `src/main/resources/schema/migrations.list`
   manifest (one filename per line) or it silently skips migrations whose name isn't in its hardcoded
-  probe list; `@Query` must be single-line/concatenated (text blocks mis-emit) and avoid data-modifying
+  probe list; `@Query` accepts **text blocks on released rc2** (the rc1 mis-emit is fixed; this repo
+  uses them) but still avoid data-modifying
   CTEs (use single-statement `ON CONFLICT`/`RETURNING` design-out); **every slice method takes exactly
   one parameter** (a request record — route gen crashes on 2+); `@Notify` needs the separate
   `org.pragmatica-lite.aether:resource-notification` provided dep; a slice factory's *transitive*
@@ -290,8 +294,8 @@ AETHER CONTEXT (you have no built-in Aether knowledge — follow exactly):
   **reads** (e.g. `BuyTicket` injects `QuotePrice` + `SaleStatus` and calls them directly), while
   cross-subsystem **facts** propagate via pub-sub (`SeatSold`/`SeatReleased`/`PriceChanged`); no `@Heartbeat`
   in rc1; a `resources.toml` (not just `aether.toml`) must declare every `@ResourceQualifier` config
-  section. The slice-processor route-import-collision bug is now fixed in the **rc2 slice-processor**
-  (merged via PR #364 into `release-1.0.0-rc2`).
+  section. The slice-processor route-import-collision bug is fixed in the **released rc2
+  slice-processor** on Maven Central (merged via PR #364).
 - The real product lives in `org.pragmatica.example.ticketing`, structured as the **PFD telescope**
   (system→subsystem→workflow→use case as packages): **23 single-use-case slices** (subsystems booking,
   pricing, eventmanagement, availability, quote), each one nested `Request`/`Response` + an
@@ -300,6 +304,6 @@ AETHER CONTEXT (you have no built-in Aether knowledge — follow exactly):
   `@PgSql` interfaces** co-located with each slice (interface segregation — no read slice needs more
   than one method). The HelloWorld scaffold is gone.
   **Two** slice-processor codegen bugs were found+fixed (route-import collision +
-  codec-FQN shadowing of injected-slice `Request`/`Response`); both fixes now ride the rc2
-  slice-processor via PR pragmaticalabs/pragmatica#364 (merged into `release-1.0.0-rc2`) — see
+  codec-FQN shadowing of injected-slice `Request`/`Response`); both fixes shipped in the released
+  `slice-processor:1.0.0-rc2` on Maven Central (PR pragmaticalabs/pragmatica#364) — see
   `docs/DESIGN.md` §8.

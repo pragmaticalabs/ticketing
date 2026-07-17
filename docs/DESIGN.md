@@ -274,17 +274,18 @@ cancel, availability, quote.
 ## 8. Known tool issues surfaced (the "test our own tool" payoff)
 1. **slice-processor** route-import collision — duplicate single-type imports for same-simple-name
    error types (the book's idiomatic per-VO `Blank`/`Malformed` + per-process `StoreUnavailable`).
-   **FIXED** — rc1 jar patched and **merged into `release-1.0.0-rc2` via PR pragmaticalabs/pragmatica#364** (with a regression test).
+   **FIXED** — merged via PR pragmaticalabs/pragmatica#364 (with a regression test) and **released in `slice-processor:1.0.0-rc2` on Maven Central (2026-07-16)**.
 1b. **slice-processor** codec-gen shadowing — a generated `*Factory` references an injected slice's
    nested `Request`/`Response` by *simple* name, but the factory's local record `implements` the host
    slice, whose inherited member types `Request`/`Response` shadow them (JLS §6.5.5.2) → wrong type
    bound, compile errors. Guaranteed by "every slice has `Request`/`Response`" + "a slice injects
    another slice" (e.g. `BuyTicket` injecting `QuotePrice`/`SaleStatus`). **FIXED** — `FactoryClass
-   Generator` now emits fully-qualified names in codec entries; regression test added. **Merged into `release-1.0.0-rc2` via PR pragmaticalabs/pragmatica#364** — the same PR as the route-import fix.
-2. **pg-codegen** emits the generated SQL constant as a plain `"…"` literal and `escapeSql` escapes
-   only `\` and `"`, never newlines — so a text-block `@Query("""…""")` produces an uncompilable
-   literal. Workaround: single-line / `"…" + "…"` concatenated SQL, no embedded newlines.
-   (real bug; fix candidate — escape `\n`, or emit a Java text block.)
+   Generator` now emits fully-qualified names in codec entries; regression test added. Same PR pragmaticalabs/pragmatica#364 as the route-import fix; **released in `slice-processor:1.0.0-rc2` on Maven Central (2026-07-16)**.
+2. **pg-codegen** (rc1) emitted the generated SQL constant as a plain `"…"` literal and `escapeSql`
+   escaped only `\` and `"`, never newlines — so a text-block `@Query("""…""")` produced an
+   uncompilable literal, forcing single-line / `"…" + "…"` concatenated SQL.
+   **FIXED in the released `1.0.0-rc2`** (verified 2026-07-17: escaped `\n` emission, named→positional
+   params intact) — the stores now use text-block `@Query` throughout.
 3. **pg-codegen** schema discovery uses a hardcoded `MIGRATION_DESCRIPTIONS` guess-list
    (`init/base/seed/add_tables/…`) probed as `V%03d__<desc>.sql`, stopping after 3 consecutive
    misses — any migration whose description isn't in the list (e.g. `V002__booking.sql`) is silently
@@ -324,8 +325,9 @@ cancel, availability, quote.
 ---
 
 ## 10. As-built deltas (where the implementation refined the design)
-The build is green (**23 single-use-case slices**, 122 unit tests, blueprint + `verify-slice` pass on
-**1.0.0-rc2**). The structure is the **PFD telescope as packages**: system → subsystem → workflow → use case,
+The build is green (**23 single-use-case slices**, 125 unit tests, blueprint + `verify-slice` pass on
+**1.0.0-rc2**, resolved from Maven Central since 2026-07-16 apart from the locally-installed
+`resource-api`/`resource-notification` — see §8 addendum in `AETHER-WISHLIST.md`). The structure is the **PFD telescope as packages**: system → subsystem → workflow → use case,
 each use case one slice (`Request`/`Response` + `execute(Request)`), slices in a subsystem sharing one
 `@PgSql` store. A few deliberate refinements vs §1–§7, driven by rc1 reality (§8) or simplicity:
 - **One use case per slice; synchronous cross-subsystem reads.** `BuyTicket` injects the `QuotePrice`

@@ -124,14 +124,12 @@ validate deltas in #5. Consider consolidating `routes.toml` + `slices/<Name>.tom
 **Acceptance.** Adding a slice scaffolds its blueprint+routes stub; a missing resource section is a build error,
 not a deploy surprise.
 
-### 8. Support text-block `@Query`
-**Problem.** Multi-line SQL via `"""…"""` mis-emits (raw newlines into a string literal), forcing
+### 8. Support text-block `@Query` — ✅ FIXED in released `1.0.0-rc2`
+**Was.** Multi-line SQL via `"""…"""` mis-emitted (raw newlines into a string literal), forcing
 `"…" + "…"` concatenation everywhere.
-**Evidence (this session).** Every non-trivial `@Query` is hand-concatenated; the design notes call this out as
-a hard-won gotcha.
-**Proposal.** Accept text blocks (normalize whitespace) — the obvious way to write multi-line SQL. If a form
-genuinely can't be supported, make it a **clear error**, not a silent mis-emit.
-**Acceptance.** A text-block `@Query` validates and runs identically to the concatenated form.
+**Verified fixed (2026-07-17).** The released rc2 pg-codegen emits the SQL constant with escaped
+`\n` (compilable literal), named params still rewrite to positional — text-block `@Query` validates
+and runs identically to the concatenated form. This repo's stores now use text blocks throughout.
 *(Positive finding to preserve: a single-statement `INSERT … SELECT coalesce(max(version),0)+1 … RETURNING`
 with an aggregate **validates fine** in pg-codegen — used for atomic version allocation. Keep that working.)*
 
@@ -275,6 +273,17 @@ registry keeps VOs untouched. Either is discoverable + compile-checked.
 **Acceptance.** `findState(SeatId)` returning a `SeatState`-field record compiles, binds the UUID, decodes the
 enum; missing/ambiguous/type-mismatched `PgRepr` is a compile error; a non-parsing column value yields a typed
 `Promise` failure, not an exception.
+
+---
+
+## Addendum (2026-07-17) — rc2 release completeness
+
+`1.0.0-rc2` reached Maven Central on 2026-07-16, but the **`aether/resource` subtree was not
+published**: `resource-api` and `resource-notification` 404, and no published rc2 jar contains
+`org.pragmatica.aether.resource.*` (`@PgSql`, `@Http`/`HttpClient`, `@Notify`/`NotificationSender`).
+Any slice project using persistence, HTTP, or notifications therefore still cannot build from
+Central alone. Wish: make the release pipeline publish the resource modules (or fail the release
+when a to-be-published module is skipped).
 
 ---
 

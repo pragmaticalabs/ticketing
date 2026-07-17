@@ -5,11 +5,13 @@ A complete, runnable realization of the **event-ticketing example** threaded thr
 parse-don't-validate, sealed typed failures; see the [JBCT book](https://leanpub.com/jbct-book)) on the **[Aether](https://github.com/pragmaticalabs/pragmatica/tree/main/aether)** unified runtime. This is the
 posterchild: the book designs the processes; this repo runs them.
 
-> **⚠️ Status — depends on an unreleased toolchain.** This project builds and passes its full test
-> suite on **Pragmatica Lite / Aether / JBCT `1.0.0-rc2`** (Java 25) — but **rc2 is not yet released**:
-> its artifacts are not on Maven Central. It compiles locally against an `~/.m2` install of rc2; a
-> fresh clone **cannot resolve the dependencies yet**, so for now read it as a reference. It becomes
-> buildable as-is once rc2 is published.
+> **⚠️ Status — `1.0.0-rc2` is on Maven Central, except two artifacts.** This project builds and
+> passes its full test suite on **Pragmatica Lite / Aether / JBCT `1.0.0-rc2`** (Java 25). The rc2
+> line was published to Maven Central on 2026-07-16 — **except `resource-api` and
+> `resource-notification`** (the `org.pragmatica.aether.resource.*` API: `@PgSql`, `@Http`,
+> `@Notify`), which did not make the release. A fresh clone resolves everything else from Central
+> but still needs those two installed to `~/.m2` from a `release-1.0.0-rc2` source checkout; the
+> project becomes buildable as-is the moment they are published.
 >
 > Design rationale and the full process catalog live in [`docs/DESIGN.md`](docs/DESIGN.md).
 
@@ -77,11 +79,11 @@ conflict is impossible by the shape of the statement.
 
 ## Build & test
 
-> **Prerequisite (see the Status note above):** needs the **whole `1.0.0-rc2` line** — `core`,
-> `aether` (`slice-api`/`pg-codegen`/…), and the `slice-processor` (with the codegen fixes merged via
-> [pragmaticalabs/pragmatica#364](https://github.com/pragmaticalabs/pragmatica/pull/364)) — in your
-> local `~/.m2`. None of these are on Maven Central yet, so until rc2 is published you must build them
-> from a `release-1.0.0-rc2` checkout (`mvn install`) before this project will resolve.
+> **Prerequisite (see the Status note above):** the `1.0.0-rc2` line resolves from **Maven Central**
+> — including the `slice-processor` with the codegen fixes merged via
+> [pragmaticalabs/pragmatica#364](https://github.com/pragmaticalabs/pragmatica/pull/364) — **except
+> `resource-api` and `resource-notification`**, which must be installed to your local `~/.m2` from a
+> `release-1.0.0-rc2` checkout (`mvn install` under `aether/resource`) before this project will resolve.
 
 ```bash
 mvn clean install         # compiles (slice-processor + pg-codegen), runs 125 unit tests, generates target/blueprint.toml (23 slices)
@@ -127,17 +129,19 @@ Each slice's exact route + error→status map: `src/main/resources/.../<usecase>
 Building the book's idiomatic patterns — and then the one-use-case-per-slice + synchronous-call design
 — surfaced real toolchain issues (full list: [`docs/DESIGN.md`](docs/DESIGN.md) §8):
 
-- **Two slice-processor codegen bugs, both fixed in the runtime** — on the rc2 branch via PR
+- **Two slice-processor codegen bugs, both fixed in the runtime** — merged via PR
   [pragmaticalabs/pragmatica#364](https://github.com/pragmaticalabs/pragmatica/pull/364), each with a
-  regression test (the project builds green on **1.0.0-rc2**):
+  regression test, and **released in `slice-processor:1.0.0-rc2` on Maven Central**:
   1. duplicate single-type imports when two error types share a simple name (the book's per-VO
      `Blank`/`Malformed` guarantee it);
   2. generated codecs referenced an injected slice's nested `Request`/`Response` by *simple* name,
      which the host slice's inherited member types shadow (JLS §6.5.5.2) — guaranteed by "every slice
      has `Request`/`Response`" + "a slice injects another slice". Both now emit fully-qualified names;
      both have regression tests.
-- **pg-codegen / structure workarounds, documented:** `schema/migrations.list` manifest; single-line
-  `@Query` (no text blocks, no data-modifying CTEs); one parameter per method; `@Notify` in a separate
+- **pg-codegen / structure workarounds, documented:** `schema/migrations.list` manifest; no
+  data-modifying CTEs in `@Query` (single-statement `ON CONFLICT`/`RETURNING` design-out instead;
+  text-block `@Query` works as of the released rc2 — the rc1 mis-emit is fixed); one parameter per
+  method; `@Notify` in a separate
   `resource-notification` artifact; slice-factory transitive deps cap at 15 (the split keeps every
   factory well under); no `@Heartbeat`; topics must be flat kebab-case; the forge `--blueprint`
   coordinate form. These are the friction a real telescope-shaped app finds that a HelloWorld never will.
