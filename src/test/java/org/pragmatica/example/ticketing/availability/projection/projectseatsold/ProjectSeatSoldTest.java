@@ -9,6 +9,7 @@ import org.pragmatica.lang.Promise;
 import org.pragmatica.lang.Unit;
 import org.pragmatica.lang.utils.Causes;
 import org.pragmatica.example.ticketing.availability.projection.SeatProjectionStore;
+import org.pragmatica.example.ticketing.shared.SeatState;
 import org.pragmatica.example.ticketing.shared.event.SeatSold;
 
 import org.junit.jupiter.api.Test;
@@ -19,15 +20,15 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 class ProjectSeatSoldTest {
     private static final class FakeStore implements SeatProjectionStore {
-        private final Map<UUID, String> statuses = new HashMap<>();
+        private final Map<UUID, SeatState> statuses = new HashMap<>();
 
         // Test-only inspection of the projected state the upsert wrote.
-        Option<String> statusOf(UUID seatId) {
+        Option<SeatState> statusOf(UUID seatId) {
             return Option.option(statuses.get(seatId));
         }
 
         @Override
-        public Promise<Unit> upsertStatus(UUID seatId, UUID eventId, String status) {
+        public Promise<Unit> upsertStatus(UUID seatId, UUID eventId, SeatState status) {
             statuses.put(seatId, status);
 
             return Promise.UNIT;
@@ -37,7 +38,7 @@ class ProjectSeatSoldTest {
     // Store whose every operation fails, to drive the subscriber's recover-to-Unit path.
     private static final class FailingStore implements SeatProjectionStore {
         @Override
-        public Promise<Unit> upsertStatus(UUID seatId, UUID eventId, String status) {
+        public Promise<Unit> upsertStatus(UUID seatId, UUID eventId, SeatState status) {
             return Causes.cause("store unavailable").promise();
         }
     }
@@ -57,7 +58,7 @@ class ProjectSeatSoldTest {
                   .onFailure(cause -> fail(cause.message()));
         store.statusOf(seat)
              .onEmpty(() -> fail("Expected projected status"))
-             .onPresent(status -> assertThat(status).isEqualTo("sold"));
+             .onPresent(status -> assertThat(status).isEqualTo(SeatState.SOLD));
     }
 
     @Test

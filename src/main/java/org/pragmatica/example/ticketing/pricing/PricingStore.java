@@ -7,6 +7,7 @@ import org.pragmatica.aether.resource.db.PgSql;
 import org.pragmatica.lang.Option;
 import org.pragmatica.lang.Promise;
 import org.pragmatica.lang.Unit;
+import org.pragmatica.example.ticketing.shared.PriceTier;
 
 
 /// Pricing-subsystem persistence, shared by every pricing use-case slice: an append-only
@@ -14,8 +15,9 @@ import org.pragmatica.lang.Unit;
 /// validator-friendly SQL only.
 @PgSql
 public interface PricingStore {
-    /// Per-process projection row; component order matches the SELECT column order.
-    record PriceRow(long amountMinor, String currency, String tier, long version) {}
+    /// Per-process projection row; component order matches the SELECT column order. The `tier` column
+    /// decodes to `PriceTier` via its `valueMapping()` (parse-don't-validate at the row boundary).
+    record PriceRow(long amountMinor, String currency, PriceTier tier, long version) {}
 
     /// Append a new price-history row, allocating its version atomically in the same statement as
     /// `max(existing version) + 1` for this (event, tier), and return it. A `UNIQUE (event_id, tier,
@@ -26,7 +28,7 @@ public interface PricingStore {
            SELECT :id, :eventId, :tier, :amountMinor, :currency, coalesce(max(pe.version), 0) + 1
            FROM price_events pe WHERE pe.event_id = :eventId AND pe.tier = :tier
            RETURNING version""")
-    Promise<Long> appendPrice(UUID id, UUID eventId, String tier, long amountMinor, String currency);
+    Promise<Long> appendPrice(UUID id, UUID eventId, PriceTier tier, long amountMinor, String currency);
 
     @Query("""
            INSERT INTO current_price (scope_key, event_id, tier, amount_minor, currency, version, updated_at)
@@ -36,7 +38,7 @@ public interface PricingStore {
            WHERE current_price.version < EXCLUDED.version""")
     Promise<Unit> upsertCurrent(String scopeKey,
                                 UUID eventId,
-                                String tier,
+                                PriceTier tier,
                                 long amountMinor,
                                 String currency,
                                 long version);

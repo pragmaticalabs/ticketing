@@ -8,6 +8,7 @@ import org.pragmatica.lang.Option;
 import org.pragmatica.lang.Promise;
 import org.pragmatica.lang.utils.Causes;
 import org.pragmatica.example.ticketing.availability.query.seatstatus.SeatStatus.Request;
+import org.pragmatica.example.ticketing.shared.SeatState;
 
 import org.junit.jupiter.api.Test;
 
@@ -17,9 +18,9 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 class SeatStatusTest {
     private static final class FakeStore implements SeatStatusStore {
-        private final Map<UUID, String> statuses = new HashMap<>();
+        private final Map<UUID, SeatState> statuses = new HashMap<>();
 
-        void seed(UUID seatId, String status) {
+        void seed(UUID seatId, SeatState status) {
             statuses.put(seatId, status);
         }
 
@@ -44,7 +45,7 @@ class SeatStatusTest {
     void execute_seatSold_returnsSold() {
         var seat = UUID.randomUUID();
 
-        store.seed(seat, "sold");
+        store.seed(seat, SeatState.SOLD);
         slice.execute(new Request(seat.toString()))
              .await()
              .onFailure(cause -> fail(cause.message()))

@@ -52,13 +52,14 @@ public interface SeatStatus {
                 return store.findStatus(seatId.value().value())
                             .mapError(_ -> AvailabilityError.storeUnavailable())
                             .map(this::statusOf)
-                            .map(state -> new Response(seat, state));
+                            .map(state -> new Response(seat,
+                                                       state.dbValue()));
             }
 
             // A missing row means the seat was never sold/held -- default to available.
-            private String statusOf(Option<StatusRow> found) {
+            private SeatState statusOf(Option<StatusRow> found) {
                 return found.map(StatusRow::state)
-                            .or(SeatState.AVAILABLE.dbValue());
+                            .or(SeatState.AVAILABLE);
             }
         }
 

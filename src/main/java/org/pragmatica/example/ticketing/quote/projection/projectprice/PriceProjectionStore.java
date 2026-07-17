@@ -6,6 +6,7 @@ import org.pragmatica.aether.pg.codegen.annotation.Query;
 import org.pragmatica.aether.resource.db.PgSql;
 import org.pragmatica.lang.Promise;
 import org.pragmatica.lang.Unit;
+import org.pragmatica.example.ticketing.shared.PriceTier;
 
 
 /// Write-side persistence for `project-price`: maintains the `price_view` projection from
@@ -22,7 +23,7 @@ public interface PriceProjectionStore {
            WHERE price_view.version < EXCLUDED.version""")
     Promise<Unit> upsertPrice(String scopeKey,
                               UUID eventId,
-                              String tier,
+                              PriceTier tier,
                               long amountMinor,
                               String currency,
                               long version);

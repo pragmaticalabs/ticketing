@@ -6,6 +6,7 @@ import org.pragmatica.aether.pg.codegen.annotation.Query;
 import org.pragmatica.aether.resource.db.PgSql;
 import org.pragmatica.lang.Promise;
 import org.pragmatica.lang.Unit;
+import org.pragmatica.example.ticketing.shared.SeatState;
 
 
 /// Persistence shared by the availability projection use cases (`project-seat-sold`,
@@ -20,5 +21,5 @@ public interface SeatProjectionStore {
            VALUES (:seatId, :eventId, :state, now())
            ON CONFLICT (seat_id) DO UPDATE SET
            state = EXCLUDED.state, event_id = EXCLUDED.event_id, updated_at = now()""")
-    Promise<Unit> upsertStatus(UUID seatId, UUID eventId, String state);
+    Promise<Unit> upsertStatus(UUID seatId, UUID eventId, SeatState state);
 }

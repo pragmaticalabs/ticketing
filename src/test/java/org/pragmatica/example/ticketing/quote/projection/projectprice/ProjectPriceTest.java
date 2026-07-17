@@ -8,6 +8,7 @@ import org.pragmatica.lang.Option;
 import org.pragmatica.lang.Promise;
 import org.pragmatica.lang.Unit;
 import org.pragmatica.lang.utils.Causes;
+import org.pragmatica.example.ticketing.shared.PriceTier;
 import org.pragmatica.example.ticketing.shared.event.PriceChanged;
 
 import org.junit.jupiter.api.Test;
@@ -19,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 class ProjectPriceTest {
     // Test-only stored representation of a projection row. The write-side store exposes no reader, so
     // the fake keeps its own rows and offers `rowOf` for inspection.
-    private record PriceRow(long amountMinor, String currency, String tier, long version) {}
+    private record PriceRow(long amountMinor, String currency, PriceTier tier, long version) {}
 
     private static final class FakeStore implements PriceProjectionStore {
         private final Map<String, PriceRow> rows = new HashMap<>();
@@ -29,7 +30,7 @@ class ProjectPriceTest {
         @Override
         public Promise<Unit> upsertPrice(String scopeKey,
                                          UUID eventId,
-                                         String tier,
+                                         PriceTier tier,
                                          long amountMinor,
                                          String currency,
                                          long version) {
@@ -55,7 +56,7 @@ class ProjectPriceTest {
         @Override
         public Promise<Unit> upsertPrice(String scopeKey,
                                          UUID eventId,
-                                         String tier,
+                                         PriceTier tier,
                                          long amountMinor,
                                          String currency,
                                          long version) {

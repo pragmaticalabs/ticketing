@@ -94,7 +94,7 @@ public interface SetPrice {
             private Promise<Response> commit(ValidWrite write) {
                 return store.appendPrice(UUID.randomUUID(),
                                          write.eventId(),
-                                         write.tierName(),
+                                         write.tier(),
                                          write.amountMinor(),
                                          write.currency())
                             .mapError(_ -> PricingError.storeUnavailable())
@@ -106,7 +106,7 @@ public interface SetPrice {
             private Promise<Long> publishCommitted(ValidWrite write, long version) {
                 return store.upsertCurrent(write.scopeKey(),
                                            write.eventId(),
-                                           write.tierName(),
+                                           write.tier(),
                                            write.amountMinor(),
                                            write.currency(),
                                            version)

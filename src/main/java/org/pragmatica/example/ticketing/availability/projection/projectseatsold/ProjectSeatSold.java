@@ -47,7 +47,7 @@ public interface ProjectSeatSold {
             private Promise<Unit> convergeSold(ValidSeatRef ref) {
                 return store.upsertStatus(ref.seat().value().value(),
                                           ref.event().value().value(),
-                                          SeatState.SOLD.dbValue());
+                                          SeatState.SOLD);
             }
         }
 

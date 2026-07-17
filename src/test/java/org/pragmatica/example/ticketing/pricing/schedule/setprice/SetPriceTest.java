@@ -14,6 +14,7 @@ import org.pragmatica.lang.utils.Causes;
 import org.pragmatica.example.ticketing.pricing.PricingStore;
 import org.pragmatica.example.ticketing.pricing.PricingStore.PriceRow;
 import org.pragmatica.example.ticketing.pricing.schedule.setprice.SetPrice.Request;
+import org.pragmatica.example.ticketing.shared.PriceTier;
 import org.pragmatica.example.ticketing.shared.event.PriceChanged;
 
 import org.junit.jupiter.api.Test;
@@ -30,14 +31,14 @@ class SetPriceTest {
         // Allocate the next version for (event, tier) as max-existing + 1 (starting at 1), like the
         // real append-only price_events log, and return it.
         @Override
-        public Promise<Long> appendPrice(UUID id, UUID eventId, String tier, long amountMinor, String currency) {
+        public Promise<Long> appendPrice(UUID id, UUID eventId, PriceTier tier, long amountMinor, String currency) {
             return Promise.success(versions.merge(eventId + ":" + tier, 1L, (existing, increment) -> existing + 1L));
         }
 
         @Override
         public Promise<Unit> upsertCurrent(String scopeKey,
                                            UUID eventId,
-                                           String tier,
+                                           PriceTier tier,
                                            long amountMinor,
                                            String currency,
                                            long version) {
@@ -55,14 +56,14 @@ class SetPriceTest {
     // Store whose every operation fails, to simulate the pricing store being unavailable.
     private static final class FailingStore implements PricingStore {
         @Override
-        public Promise<Long> appendPrice(UUID id, UUID eventId, String tier, long amountMinor, String currency) {
+        public Promise<Long> appendPrice(UUID id, UUID eventId, PriceTier tier, long amountMinor, String currency) {
             return Causes.cause("pricing store unavailable").promise();
         }
 
         @Override
         public Promise<Unit> upsertCurrent(String scopeKey,
                                            UUID eventId,
-                                           String tier,
+                                           PriceTier tier,
                                            long amountMinor,
                                            String currency,
                                            long version) {

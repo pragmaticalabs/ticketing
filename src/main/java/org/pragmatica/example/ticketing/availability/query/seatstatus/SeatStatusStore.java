@@ -6,6 +6,7 @@ import org.pragmatica.aether.pg.codegen.annotation.Query;
 import org.pragmatica.aether.resource.db.PgSql;
 import org.pragmatica.lang.Option;
 import org.pragmatica.lang.Promise;
+import org.pragmatica.example.ticketing.shared.SeatState;
 
 
 /// Persistence for the `seat-status` query use case: read a single seat's latest status from the
@@ -14,8 +15,9 @@ import org.pragmatica.lang.Promise;
 /// available).
 @PgSql
 public interface SeatStatusStore {
-    /// Per-process projection row. Component order matches the SELECT column order.
-    record StatusRow(String state) {}
+    /// Per-process projection row. Component order matches the SELECT column order. The `state` column
+    /// decodes to `SeatState` via its `valueMapping()` (parse-don't-validate at the row boundary).
+    record StatusRow(SeatState state) {}
 
     @Query("SELECT state FROM seat_availability WHERE seat_id = :seatId")
     Promise<Option<StatusRow>> findStatus(UUID seatId);

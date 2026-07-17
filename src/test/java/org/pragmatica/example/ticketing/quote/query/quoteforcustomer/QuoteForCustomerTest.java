@@ -9,6 +9,7 @@ import org.pragmatica.lang.Promise;
 import org.pragmatica.lang.utils.Causes;
 import org.pragmatica.example.ticketing.quote.query.quoteforcustomer.QuoteViewStore.PriceRow;
 import org.pragmatica.example.ticketing.quote.query.quoteforcustomer.QuoteForCustomer.Request;
+import org.pragmatica.example.ticketing.shared.PriceTier;
 
 import org.junit.jupiter.api.Test;
 
@@ -46,7 +47,7 @@ class QuoteForCustomerTest {
     void execute_priceSet_returnsQuote() {
         var event = UUID.randomUUID().toString();
 
-        store.seed(event + ":STANDARD", new PriceRow(4950, "USD", "STANDARD", 1));
+        store.seed(event + ":STANDARD", new PriceRow(4950, "USD", PriceTier.STANDARD, 1));
         slice.execute(new Request(event, "STANDARD"))
              .await()
              .onFailure(cause -> fail(cause.message()))
