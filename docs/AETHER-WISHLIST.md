@@ -279,11 +279,14 @@ enum; missing/ambiguous/type-mismatched `PgRepr` is a compile error; a non-parsi
 ## Addendum (2026-07-17) — rc2 release completeness
 
 `1.0.0-rc2` reached Maven Central on 2026-07-16, but the **`aether/resource` subtree was not
-published**: `resource-api` and `resource-notification` 404, and no published rc2 jar contains
-`org.pragmatica.aether.resource.*` (`@PgSql`, `@Http`/`HttpClient`, `@Notify`/`NotificationSender`).
-Any slice project using persistence, HTTP, or notifications therefore still cannot build from
-Central alone. Wish: make the release pipeline publish the resource modules (or fail the release
-when a to-be-published module is skipped).
+published — deliberately**: `aether/resource/pom.xml` at `v1.0.0-rc2` sets
+`<skipPublishing>true</skipPublishing>` (central-publishing-maven-plugin), inherited by all 13
+resource modules. Result: `resource-api` and `resource-notification` 404, and no published rc2 jar
+contains `org.pragmatica.aether.resource.*` (`@PgSql`, `@Http`/`HttpClient`,
+`@Notify`/`NotificationSender`) — yet every slice project needs them as `provided` compile deps, so
+nothing that touches persistence, HTTP, or notifications builds from Central alone. Wish: publish
+the resource modules (drop the skip), or ship the resource *annotations/API* in an artifact that is
+published.
 
 ---
 
