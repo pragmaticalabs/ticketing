@@ -18,10 +18,11 @@ import org.pragmatica.example.ticketing.shared.event.SeatReleasedPublisher;
 /// subsystem `booking` -> workflow `hold` -> use case `sweep-holds`. One use case, one
 /// `Request`/`Response` pair, one `execute` method.
 ///
-/// Recovery class: **FER** -- holds decay with time; this operator endpoint expires the held-but-
-/// stale rows and publishes a `SeatReleased` fact per freed seat. Production would wire `execute` to
-/// a `@Heartbeat` schedule; it is exposed as an endpoint here so the Iteration is drivable without
-/// the scheduler. The empty `Request` record keeps the one-parameter slice-method contract.
+/// Recovery class: **FER** -- holds decay with time; the sweep expires the held-but-stale rows and
+/// publishes a `SeatReleased` fact per freed seat. `sweep()` runs on the runtime scheduler (rc2
+/// `Scheduled`, cadence in `[scheduling.sweep-holds]` in resources.toml); the HTTP endpoint on
+/// `execute` remains as an operator escape hatch. The empty `Request` record keeps the
+/// one-parameter slice-method contract.
 @Slice
 public interface SweepHolds {
     record Request() {}
@@ -45,6 +46,11 @@ public interface SweepHolds {
 
     Promise<Response> execute(Request request);
 
+    /// Scheduler entry point: zero parameters, `Promise<Unit>` (the rc2 `Scheduled` contract);
+    /// excluded from route generation. Delegates to `execute`.
+    @SweepSchedule
+    Promise<Unit> sweep();
+
     static SweepHolds sweepHolds(@PgSql BookingStore store,
                                  @SeatReleasedPublisher Publisher<SeatReleased> seatReleased) {
         @SuppressWarnings("JBCT-SEQ-01")
@@ -64,6 +70,11 @@ public interface SweepHolds {
             private Promise<Unit> publishRelease(SeatRef seat) {
                 return seatReleased.publish(new SeatReleased(seat.seatId().toString(),
                                                              seat.eventId().toString()));
+            }
+
+            @Override
+            public Promise<Unit> sweep() {
+                return execute(new Request()).mapToUnit();
             }
         }
 

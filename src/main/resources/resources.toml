@@ -22,7 +22,10 @@ max_lifetime = "30m"
 leak_detection_timeout = "0s"
 io_threads = 0
 
-# --- Cross-slice fact topics (pub-sub) ---
+# --- Cross-slice fact topics (pub-sub). Topic names + payload types are single-sourced in the
+#     typed Topic<T> constants on the fact records (rc2); qualifier config strings reference the
+#     constants. The sections below remain because jbct-maven-plugin's generate-blueprint still
+#     validates one section per resolved topic name (rc2 DX gap — see AETHER-WISHLIST addendum). ---
 [seat-sold]
 topic_name = "seat-sold"
 
@@ -31,6 +34,13 @@ topic_name = "seat-released"
 
 [price-changed]
 topic_name = "price-changed"
+
+# --- Scheduled hold-expiry sweep (rc2 Scheduled). All three keys are required (even if empty);
+#     a non-empty interval wins over cron. Resolution happens at deploy time. ---
+[scheduling.sweep-holds]
+interval = "60s"
+cron = ""
+execution_mode = "SINGLE"
 
 # --- External payment gateway (@Http -> config "http"). Booking authorizes/voids/refunds here.
 #     For local smoke testing, point this at a stub gateway (see scripts/stub-gateway). ---
