@@ -12,10 +12,8 @@ import org.pragmatica.example.ticketing.shared.EventId;
 /// `sold-count`. One use case, one `Request`/`Response` pair, one `execute` method.
 @Slice
 public interface SoldCount {
-    @SuppressWarnings("JBCT-VO-01")
     record Request(String event) {}
 
-    @SuppressWarnings("JBCT-VO-01")
     record Response(String event, long sold) {}
 
     sealed interface AvailabilityError extends Cause {

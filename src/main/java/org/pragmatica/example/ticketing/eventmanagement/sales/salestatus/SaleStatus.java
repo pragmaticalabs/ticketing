@@ -13,10 +13,8 @@ import org.pragmatica.example.ticketing.shared.EventId;
 /// `sale-status`. One use case, one `Request`/`Response` pair, one `execute` method.
 @Slice
 public interface SaleStatus {
-    @SuppressWarnings("JBCT-VO-01")
     record Request(String event) {}
 
-    @SuppressWarnings("JBCT-VO-01")
     record Response(String event, boolean onSale, String onSaleAt) {}
 
     sealed interface SaleStatusError extends Cause {

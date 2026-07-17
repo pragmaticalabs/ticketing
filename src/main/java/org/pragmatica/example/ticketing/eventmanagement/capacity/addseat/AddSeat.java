@@ -17,10 +17,8 @@ import org.pragmatica.example.ticketing.shared.SeatLocation;
 /// case `add-seat`. All-body request form: every field binds to a request component by name.
 @Slice
 public interface AddSeat {
-    @SuppressWarnings("JBCT-VO-01")
     record Request(String event, String section, String row, int number, String tier) {}
 
-    @SuppressWarnings("JBCT-VO-01")
     record Response(String seat) {}
 
     record ValidAddSeat(EventId event, SeatLocation location, PriceTier tier) {

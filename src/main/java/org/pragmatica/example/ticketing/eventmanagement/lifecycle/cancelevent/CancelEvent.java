@@ -13,10 +13,8 @@ import org.pragmatica.example.ticketing.shared.EventId;
 /// case `cancel-event`. One use case, one `Request`/`Response` pair, one `execute` method.
 @Slice
 public interface CancelEvent {
-    @SuppressWarnings("JBCT-VO-01")
     record Request(String event) {}
 
-    @SuppressWarnings("JBCT-VO-01")
     record Response(String event) {}
 
     sealed interface CancelEventError extends Cause {

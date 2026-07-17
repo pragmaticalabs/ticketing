@@ -19,11 +19,9 @@ import org.pragmatica.lang.Unit;
 @PgSql
 public interface EventStore {
     /// Projection of a RETURNING id clause. Component order matches the RETURNING column order.
-    @SuppressWarnings("JBCT-VO-01")
     record RowId(UUID id) {}
 
     /// Current-state read of an event. Component order matches the SELECT column order.
-    @SuppressWarnings("JBCT-VO-01")
     record EventRow(String status, String onSaleAt) {}
 
     @Query("INSERT INTO events (id, venue, on_sale_at, status) VALUES (:id, :venue, :onSaleAt, 'draft')")

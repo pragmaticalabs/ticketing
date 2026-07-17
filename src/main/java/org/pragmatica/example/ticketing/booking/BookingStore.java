@@ -22,20 +22,16 @@ import org.pragmatica.lang.Unit;
 @PgSql
 public interface BookingStore {
     /// Projection of a RETURNING id clause. Component order matches the RETURNING column order.
-    @SuppressWarnings("JBCT-VO-01")
     record RowId(UUID id) {}
 
     /// A freed seat from the expiry sweep. Component order matches the RETURNING column order.
-    @SuppressWarnings("JBCT-VO-01")
     record SeatRef(UUID seatId, UUID eventId) {}
 
     /// Current-state read of a booking. Component order matches the SELECT column order.
-    @SuppressWarnings("JBCT-VO-01")
     record BookingRow(String status, UUID customerId, UUID seatId, UUID ticketId, UUID eventId) {}
 
     /// Hold decay snapshot: the persisted state plus time-as-decay flags computed at read.
     /// Component order matches the SELECT column order.
-    @SuppressWarnings("JBCT-VO-01")
     record HoldRow(String state, boolean expired, boolean stale) {}
 
     @Query("""

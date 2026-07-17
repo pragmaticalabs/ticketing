@@ -16,10 +16,8 @@ import org.pragmatica.example.ticketing.shared.EventId;
 /// case `create-event`. One use case, one `Request`/`Response` pair, one `execute` method.
 @Slice
 public interface CreateEvent {
-    @SuppressWarnings("JBCT-VO-01")
     record Request(String venue, String onSaleAt) {}
 
-    @SuppressWarnings("JBCT-VO-01")
     record Response(String event) {}
 
     /// Validated create request: a non-blank venue and a parsed ISO-8601 on-sale timestamp. Both

@@ -15,7 +15,6 @@ import org.pragmatica.lang.Unit;
 @PgSql
 public interface PricingStore {
     /// Per-process projection row; component order matches the SELECT column order.
-    @SuppressWarnings("JBCT-VO-01")
     record PriceRow(long amountMinor, String currency, String tier, long version) {}
 
     /// Append a new price-history row, allocating its version atomically in the same statement as

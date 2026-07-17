@@ -26,7 +26,6 @@ import org.pragmatica.example.ticketing.shared.event.SeatReleasedPublisher;
 public interface SweepHolds {
     record Request() {}
 
-    @SuppressWarnings("JBCT-VO-01")
     record Response(long released) {}
 
     /// Closed set of sweep failures. Each is a distinct record so route error-mapping can target it

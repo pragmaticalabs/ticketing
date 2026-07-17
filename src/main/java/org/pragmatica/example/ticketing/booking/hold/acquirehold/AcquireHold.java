@@ -21,10 +21,8 @@ import org.pragmatica.example.ticketing.shared.SeatId;
 /// saga (state 'held'); the loser of a contended seat fast-fails with SeatUnavailable.
 @Slice
 public interface AcquireHold {
-    @SuppressWarnings("JBCT-VO-01")
     record Request(String customer, String event, String seat) {}
 
-    @SuppressWarnings("JBCT-VO-01")
     record Response(String reservation, String state) {}
 
     /// Validated hold-acquire target.

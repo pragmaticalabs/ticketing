@@ -14,10 +14,8 @@ import org.pragmatica.example.ticketing.shared.PriceTier;
 /// `quote-for-customer`. One use case, one `Request`/`Response` pair, one `execute` method.
 @Slice
 public interface QuoteForCustomer {
-    @SuppressWarnings("JBCT-VO-01")
     record Request(String event, String tier) {}
 
-    @SuppressWarnings("JBCT-VO-01")
     record Response(String event, String tier, long amountMinor, String currency, long version) {}
 
     record ValidQuery(EventId event, PriceTier tier) {

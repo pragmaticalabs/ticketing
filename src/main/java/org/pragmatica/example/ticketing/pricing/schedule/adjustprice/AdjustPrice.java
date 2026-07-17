@@ -24,10 +24,8 @@ import org.pragmatica.example.ticketing.shared.event.PriceChangedPublisher;
 /// version, never an overwrite. One use case, one `Request`/`Response` pair, one `execute` method.
 @Slice
 public interface AdjustPrice {
-    @SuppressWarnings("JBCT-VO-01")
     record Request(String event, String tier, long percent) {}
 
-    @SuppressWarnings("JBCT-VO-01")
     record Response(long version) {}
 
     /// Validated demand-adjust request; the percentage is parsed into a positive `Percent` value

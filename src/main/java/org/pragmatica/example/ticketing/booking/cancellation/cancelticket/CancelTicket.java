@@ -27,17 +27,13 @@ import org.pragmatica.example.ticketing.shared.event.SeatReleasedPublisher;
 /// the freed seat is published as a `SeatReleased` fact.
 @Slice
 public interface CancelTicket {
-    @SuppressWarnings("JBCT-VO-01")
     record Request(String booking, String customer) {}
 
-    @SuppressWarnings("JBCT-VO-01")
     record Response(String booking, String receipt) {}
 
     // Payment-gateway wire DTOs (plain records; the @Http client serializes/deserializes them as JSON).
-    @SuppressWarnings("JBCT-VO-01")
     record RefundRequest(String booking) {}
 
-    @SuppressWarnings("JBCT-VO-01")
     record RefundResult(String receiptId) {}
 
     /// Validated cancel target.
@@ -66,7 +62,6 @@ public interface CancelTicket {
     }
 
     /// Growing-context stage: the validated cancel plus the loaded booking row.
-    @SuppressWarnings("JBCT-VO-01")
     record LoadedBooking(ValidCancel valid, BookingRow booking) {
         UUID bookingUuid() {
             return valid.bookingUuid();
@@ -96,7 +91,6 @@ public interface CancelTicket {
     }
 
     /// Terminal cancel stage: the loaded booking plus the refund receipt.
-    @SuppressWarnings("JBCT-VO-01")
     record RefundedBooking(LoadedBooking loaded, String receipt) {
         UUID ticketUuid() {
             return loaded.ticketUuid();

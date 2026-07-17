@@ -18,10 +18,8 @@ import org.pragmatica.example.ticketing.shared.SeatId;
 /// time-as-decay flags to a single label.
 @Slice
 public interface CheckHold {
-    @SuppressWarnings("JBCT-VO-01")
     record Request(String seat) {}
 
-    @SuppressWarnings("JBCT-VO-01")
     record Response(String seat, String state) {}
 
     /// Closed set of check failures. Each is a distinct record so route error-mapping can target it

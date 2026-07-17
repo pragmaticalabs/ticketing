@@ -16,10 +16,8 @@ import org.pragmatica.example.ticketing.shared.SeatState;
 /// projection row was never sold/held, so it reads as available.
 @Slice
 public interface SeatStatus {
-    @SuppressWarnings("JBCT-VO-01")
     record Request(String seat) {}
 
-    @SuppressWarnings("JBCT-VO-01")
     record Response(String seat, String state) {}
 
     sealed interface AvailabilityError extends Cause {

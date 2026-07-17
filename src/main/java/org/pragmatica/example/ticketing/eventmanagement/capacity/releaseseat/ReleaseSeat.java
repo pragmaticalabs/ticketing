@@ -13,10 +13,8 @@ import org.pragmatica.example.ticketing.shared.SeatId;
 /// case `release-seat`. Guarded transition: releases only a seat currently 'blocked'.
 @Slice
 public interface ReleaseSeat {
-    @SuppressWarnings("JBCT-VO-01")
     record Request(String seat) {}
 
-    @SuppressWarnings("JBCT-VO-01")
     record Response(String seat) {}
 
     sealed interface ReleaseSeatError extends Cause {

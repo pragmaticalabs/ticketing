@@ -15,7 +15,6 @@ import org.pragmatica.lang.Promise;
 @PgSql
 public interface SeatStatusStore {
     /// Per-process projection row. Component order matches the SELECT column order.
-    @SuppressWarnings("JBCT-VO-01")
     record StatusRow(String state) {}
 
     @Query("SELECT state FROM seat_availability WHERE seat_id = :seatId")

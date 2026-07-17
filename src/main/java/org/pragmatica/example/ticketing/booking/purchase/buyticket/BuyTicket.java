@@ -49,23 +49,17 @@ import org.pragmatica.example.ticketing.shared.event.SeatSoldPublisher;
 /// and notifications an `@Notify` resource.
 @Slice
 public interface BuyTicket {
-    @SuppressWarnings("JBCT-VO-01")
     record Request(String customer, String event, String seat, String tier) {}
 
-    @SuppressWarnings("JBCT-VO-01")
     record Response(String booking, String ticket, String seat, String receipt, long amountMinor, String currency) {}
 
     // Payment-gateway wire DTOs (plain records; the @Http client serializes/deserializes them as JSON).
-    @SuppressWarnings("JBCT-VO-01")
     record AuthRequest(long amountMinor, String currency, String customer) {}
 
-    @SuppressWarnings("JBCT-VO-01")
     record AuthResult(boolean approved, String receiptId) {}
 
-    @SuppressWarnings("JBCT-VO-01")
     record VoidRequest(String receiptId) {}
 
-    @SuppressWarnings("JBCT-VO-01")
     record VoidResult(String status) {}
 
     /// Validated buy target. Raw request fields are parsed into value objects; all failures surface
@@ -118,11 +112,9 @@ public interface BuyTicket {
     }
 
     /// Growing-context stage: validated buy plus the authoritative price.
-    @SuppressWarnings("JBCT-VO-01")
     record PricedBuy(ValidBuy buy, long amountMinor, String currency) {}
 
     /// Growing-context stage: priced buy plus the claimed reservation (the design-out seat claim).
-    @SuppressWarnings("JBCT-VO-01")
     record ReservedBuy(PricedBuy priced, UUID reservationId) {
         ValidBuy buy() {
             return priced.buy();
@@ -138,7 +130,6 @@ public interface BuyTicket {
     }
 
     /// Growing-context stage: reserved buy plus the authorized payment receipt.
-    @SuppressWarnings("JBCT-VO-01")
     record AuthorizedBuy(ReservedBuy reserved, UUID receiptId) {
         ValidBuy buy() {
             return reserved.buy();
@@ -158,7 +149,6 @@ public interface BuyTicket {
     }
 
     /// Terminal buy stage: the persisted booking and ticket, ready to notify, publish and respond.
-    @SuppressWarnings("JBCT-VO-01")
     record Confirmation(AuthorizedBuy authorized, UUID bookingId, UUID ticketId) {
         Response response() {
             return new Response(bookingId.toString(),

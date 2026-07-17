@@ -11,7 +11,6 @@ import org.pragmatica.lang.Promise;
 @PgSql
 public interface QuoteViewStore {
     /// Per-process projection row; component order matches the SELECT column order.
-    @SuppressWarnings("JBCT-VO-01")
     record PriceRow(long amountMinor, String currency, String tier, long version) {}
 
     @Query("SELECT amount_minor, currency, tier, version FROM price_view WHERE scope_key = :scopeKey")

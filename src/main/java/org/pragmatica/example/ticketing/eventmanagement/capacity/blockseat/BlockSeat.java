@@ -13,10 +13,8 @@ import org.pragmatica.example.ticketing.shared.SeatId;
 /// case `block-seat`. Guarded transition: blocks only a seat currently 'available'.
 @Slice
 public interface BlockSeat {
-    @SuppressWarnings("JBCT-VO-01")
     record Request(String seat) {}
 
-    @SuppressWarnings("JBCT-VO-01")
     record Response(String seat) {}
 
     sealed interface BlockSeatError extends Cause {
