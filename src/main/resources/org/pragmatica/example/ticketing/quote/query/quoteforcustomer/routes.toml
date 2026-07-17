@@ -4,6 +4,7 @@ prefix = "/api/v1/quotes"
 execute = "GET /{event}/{tier}"
 
 [errors]
+strict = true
 default = 500
 HTTP_400 = ["*Blank*", "*Malformed*", "*Unknown*"]
 HTTP_404 = ["*PriceNotFound*"]

@@ -4,6 +4,7 @@ prefix = "/api/v1/seats/block"
 execute = "POST /{seat}"
 
 [errors]
+strict = true
 default = 500
 HTTP_400 = ["*Blank*", "*Malformed*"]
 HTTP_409 = ["*SeatUnavailable*"]

@@ -4,6 +4,7 @@ prefix = "/api/v1/booking/holds"
 execute = "GET /{seat}"
 
 [errors]
+strict = true
 default = 500
 HTTP_400 = ["*Blank*", "*Malformed*"]
 HTTP_503 = ["*StoreUnavailable*"]

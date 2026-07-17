@@ -4,6 +4,7 @@ prefix = "/api/v1/pricing/set"
 execute = "POST /"
 
 [errors]
+strict = true
 default = 500
 HTTP_400 = ["*Blank*", "*Malformed*", "*Unknown*", "*NegativeAmount*"]
 HTTP_503 = ["*StoreUnavailable*"]
