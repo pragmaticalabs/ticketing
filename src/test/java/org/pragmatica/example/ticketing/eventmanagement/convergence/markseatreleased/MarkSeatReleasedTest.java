@@ -1,17 +1,10 @@
 package org.pragmatica.example.ticketing.eventmanagement.convergence.markseatreleased;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 
-import org.pragmatica.lang.Cause;
-import org.pragmatica.lang.Option;
-import org.pragmatica.lang.Promise;
-import org.pragmatica.lang.Unit;
-import org.pragmatica.lang.utils.Causes;
-import org.pragmatica.example.ticketing.eventmanagement.EventStore;
-import org.pragmatica.example.ticketing.eventmanagement.EventStore.EventRow;
-import org.pragmatica.example.ticketing.eventmanagement.EventStore.RowId;
+import org.pragmatica.example.ticketing.eventmanagement.FailingEventStore;
+import org.pragmatica.example.ticketing.eventmanagement.InMemoryEventStore;
+import org.pragmatica.example.ticketing.shared.SeatState;
 import org.pragmatica.example.ticketing.shared.event.SeatReleased;
 
 import org.junit.jupiter.api.Test;
@@ -21,174 +14,127 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 
 class MarkSeatReleasedTest {
-    // In-memory fake of the @PgSql store. `markSeatAvailable` converges a sold seat back to
-    // 'available' (guarded on 'sold', mirroring the SQL); `seatStatusOf` exposes state for assertions.
-    private static final class FakeStore implements EventStore {
-        private final Map<UUID, EventRow> events = new HashMap<>();
-        private final Map<UUID, String> seats = new HashMap<>();
-
-        @Override
-        public Promise<Unit> insertEvent(UUID id, String venue, String onSaleAt) {
-            events.put(id, new EventRow("draft", onSaleAt));
-
-            return Promise.UNIT;
-        }
-
-        @Override
-        public Promise<Boolean> eventExists(UUID id) {
-            return Promise.success(events.containsKey(id));
-        }
-
-        @Override
-        public Promise<Unit> insertSeat(UUID id,
-                                        UUID eventId,
-                                        String section,
-                                        String seatRow,
-                                        int number,
-                                        String tier) {
-            seats.put(id, "available");
-
-            return Promise.UNIT;
-        }
-
-        @Override
-        public Promise<Option<RowId>> openEvent(UUID id) {
-            return Promise.success(Option.empty());
-        }
-
-        @Override
-        public Promise<Option<RowId>> cancelEvent(UUID id) {
-            return Promise.success(Option.empty());
-        }
-
-        @Override
-        public Promise<Option<RowId>> blockSeat(UUID id) {
-            return Promise.success(Option.empty());
-        }
-
-        @Override
-        public Promise<Option<RowId>> releaseSeat(UUID id) {
-            return Promise.success(Option.empty());
-        }
-
-        @Override
-        public Promise<Option<EventRow>> findEvent(UUID id) {
-            return Promise.success(Option.option(events.get(id)));
-        }
-
-        @Override
-        public Promise<Unit> markSeatSold(UUID id) {
-            seats.put(id, "sold");
-
-            return Promise.UNIT;
-        }
-
-        @Override
-        public Promise<Unit> markSeatAvailable(UUID id) {
-            if ("sold".equals(seats.get(id))) {
-                seats.put(id, "available");
-            }
-
-            return Promise.UNIT;
-        }
-
-        String seatStatusOf(UUID id) {
-            return seats.get(id);
-        }
-    }
-
-    // In-memory fake whose every operation fails, simulating a store outage. Used to prove the
-    // best-effort subscriber recovers a transient store error to Unit instead of propagating failure.
-    private static final class FailingStore implements EventStore {
-        private static final Cause STORE_DOWN = Causes.cause("simulated store outage");
-
-        @Override
-        public Promise<Unit> insertEvent(UUID id, String venue, String onSaleAt) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Boolean> eventExists(UUID id) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Unit> insertSeat(UUID id,
-                                        UUID eventId,
-                                        String section,
-                                        String seatRow,
-                                        int number,
-                                        String tier) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Option<RowId>> openEvent(UUID id) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Option<RowId>> cancelEvent(UUID id) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Option<RowId>> blockSeat(UUID id) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Option<RowId>> releaseSeat(UUID id) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Option<EventRow>> findEvent(UUID id) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Unit> markSeatSold(UUID id) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Unit> markSeatAvailable(UUID id) {
-            return STORE_DOWN.promise();
-        }
-    }
-
-    private final FakeStore store = new FakeStore();
+    private final InMemoryEventStore store = new InMemoryEventStore();
     private final MarkSeatReleased slice = MarkSeatReleased.markSeatReleased(store);
+    private final UUID event = UUID.randomUUID();
+
+    private UUID soldSeat(long version) {
+        var seat = UUID.randomUUID();
+
+        store.insertEvent(event, "Wembley Arena", "2026-07-01T19:00:00Z").await();
+        store.insertSeat(seat, event, "A", "12", 7, "STANDARD").await();
+        store.markSeatSold(version, seat).await().onFailure(cause -> fail(cause.message()));
+
+        return seat;
+    }
+
+    private void assertSeatState(UUID seat, SeatState expected) {
+        store.seatStateOf(seat)
+             .onEmpty(() -> fail("Expected seat " + seat + " to exist"))
+             .onPresent(state -> assertThat(state).isEqualTo(expected));
+    }
+
+    private void assertSeatVersion(UUID seat, long expected) {
+        store.seatVersionOf(seat)
+             .onEmpty(() -> fail("Expected seat " + seat + " to exist"))
+             .onPresent(version -> assertThat(version).isEqualTo(expected));
+    }
+
+    private static SeatReleased factFor(UUID seat, long version) {
+        return new SeatReleased(seat.toString(),
+                                UUID.randomUUID().toString(),
+                                version);
+    }
 
     @Test
     void execute_soldSeat_marksAvailable() {
+        var seat = soldSeat(1L);
+
+        slice.execute(factFor(seat, 2L)).await().onFailure(cause -> fail(cause.message()));
+        assertSeatState(seat, SeatState.AVAILABLE);
+        assertSeatVersion(seat, 2L);
+    }
+
+    /// Mirror of the C4 regression on the release side: a blocked seat is not silently freed.
+    @Test
+    void markSeatAvailable_blockedSeat_doesNotOverwrite() {
         var seat = UUID.randomUUID();
 
-        store.insertSeat(seat, UUID.randomUUID(), "A", "12", 7, "STANDARD").await();
-        store.markSeatSold(seat).await();
-        slice.execute(new SeatReleased(seat.toString(),
-                                       UUID.randomUUID().toString()))
+        store.withSeat(seat, event, SeatState.BLOCKED);
+        slice.execute(factFor(seat, 2L))
              .await()
-             .onFailure(cause -> fail(cause.message()));
-        assertThat(store.seatStatusOf(seat)).isEqualTo("available");
+             .onSuccess(_ -> fail("Expected a convergence conflict"))
+             .onFailure(cause -> assertThat(cause.message()).contains("cannot converge to available"));
+        assertSeatState(seat, SeatState.BLOCKED);
     }
 
     @Test
-    void execute_malformedFact_recoversToUnit() {
+    void execute_redeliveredFact_absorbsAsSuccess() {
+        var seat = soldSeat(1L);
+
+        slice.execute(factFor(seat, 2L)).await().onFailure(cause -> fail(cause.message()));
+        slice.execute(factFor(seat, 2L)).await().onFailure(cause -> fail(cause.message()));
+        assertSeatState(seat, SeatState.AVAILABLE);
+        assertSeatVersion(seat, 2L);
+    }
+
+    /// The reordering this change exists for, on the authoritative row: the seat was sold at version 3
+    /// and the release that preceded that sale is delivered afterwards. Its lower version loses, so the
+    /// seat stays sold rather than being handed back to inventory under a live booking.
+    @Test
+    void markSeatAvailable_releaseOvertakenBySale_leavesSeatSold() {
+        var seat = soldSeat(3L);
+
+        slice.execute(factFor(seat, 2L)).await().onFailure(cause -> fail(cause.message()));
+        assertSeatState(seat, SeatState.SOLD);
+        assertSeatVersion(seat, 3L);
+    }
+
+    /// The overtaken release is settled, not divergent -- absorbing it is what keeps a correct
+    /// reordering from being reported as a convergence conflict.
+    @Test
+    void markSeatAvailable_staleVersion_absorbsAsSuccess() {
+        var seat = soldSeat(3L);
+
+        slice.execute(factFor(seat, 2L)).await().onFailure(_ -> fail("A stale fact is settled, not a divergence"));
+    }
+
+    /// The same guard must not block progress: a release that genuinely follows the sale applies.
+    @Test
+    void markSeatAvailable_newerVersion_appliesTransition() {
+        var seat = soldSeat(3L);
+
+        slice.execute(factFor(seat, 4L)).await().onFailure(cause -> fail(cause.message()));
+        assertSeatState(seat, SeatState.AVAILABLE);
+        assertSeatVersion(seat, 4L);
+    }
+
+    @Test
+    void execute_unknownSeat_returnsSeatNotFound() {
+        slice.execute(factFor(UUID.randomUUID(),
+                              2L))
+             .await()
+             .onSuccess(_ -> fail("Expected SeatNotFound"))
+             .onFailure(cause -> assertThat(cause.message()).contains("unknown seat"));
+    }
+
+    @Test
+    void execute_malformedFact_discardsFact() {
         slice.execute(new SeatReleased("not-a-uuid",
-                                       UUID.randomUUID().toString()))
+                                       UUID.randomUUID().toString(),
+                                       2L))
              .await()
              .onFailure(cause -> fail(cause.message()));
     }
 
     @Test
-    void execute_storeFails_recoversToUnit() {
-        var failing = MarkSeatReleased.markSeatReleased(new FailingStore());
+    void execute_storeFails_propagatesFailure() {
+        var failing = MarkSeatReleased.markSeatReleased(FailingEventStore.allOperationsFail());
 
-        failing.execute(new SeatReleased(UUID.randomUUID().toString(),
-                                         UUID.randomUUID().toString()))
+        failing.execute(factFor(UUID.randomUUID(),
+                                2L))
                .await()
-               .onFailure(cause -> fail(cause.message()));
+               .onSuccess(_ -> fail("Expected the store failure to propagate"))
+               .onFailure(cause -> assertThat(cause.message()).contains("store down"));
     }
 }

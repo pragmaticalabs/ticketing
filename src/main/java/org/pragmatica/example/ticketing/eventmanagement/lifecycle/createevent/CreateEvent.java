@@ -9,6 +9,7 @@ import org.pragmatica.lang.Verify;
 import org.pragmatica.lang.vo.IsoDateTime;
 import org.pragmatica.example.ticketing.eventmanagement.EventStore;
 import org.pragmatica.example.ticketing.shared.EventId;
+import org.pragmatica.example.ticketing.shared.Validation;
 
 
 /// Use case: register a new event in 'draft' state.
@@ -23,13 +24,19 @@ public interface CreateEvent {
     /// Validated create request: a non-blank venue and a parsed ISO-8601 on-sale timestamp. Both
     /// failures surface together via `Result.all`, so a blank/garbage timestamp can no longer be
     /// persisted verbatim.
+    ///
+    /// `Result.all` wraps whatever it collects -- even a single failure -- in a core composite cause,
+    /// which the generated router cannot match against this slice's own types and would report as
+    /// HTTP 500. The closing `mapError` unwraps it back to the first failing field's local cause, which
+    /// is what makes the `HTTP_400` mapping in routes.toml live.
     record ValidCreateEvent(String venue, IsoDateTime onSaleAt) {
         static Result<ValidCreateEvent> validCreateEvent(Request request) {
             return Result.all(Verify.ensure(request.venue(),
                                             Verify.Is::present,
                                             CreateEventError.blankVenue()),
                               IsoDateTime.isoDateTime(request.onSaleAt()).mapError(_ -> CreateEventError.malformedOnSaleAt(request.onSaleAt())))
-                         .map(ValidCreateEvent::new);
+                         .map(ValidCreateEvent::new)
+                         .mapError(Validation::firstFailure);
         }
     }
 

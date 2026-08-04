@@ -1,17 +1,16 @@
 package org.pragmatica.example.ticketing.eventmanagement.lifecycle.cancelevent;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 
-import org.pragmatica.lang.Cause;
+import org.pragmatica.http.HttpStatus;
 import org.pragmatica.lang.Option;
 import org.pragmatica.lang.Promise;
-import org.pragmatica.lang.Unit;
-import org.pragmatica.lang.utils.Causes;
-import org.pragmatica.example.ticketing.eventmanagement.EventStore;
-import org.pragmatica.example.ticketing.eventmanagement.EventStore.EventRow;
+import org.pragmatica.example.ticketing.eventmanagement.EventStatus;
 import org.pragmatica.example.ticketing.eventmanagement.EventStore.RowId;
+import org.pragmatica.example.ticketing.eventmanagement.FailingEventStore;
+import org.pragmatica.example.ticketing.eventmanagement.FailingEventStore.FailOp;
+import org.pragmatica.example.ticketing.eventmanagement.InMemoryEventStore;
+import org.pragmatica.example.ticketing.eventmanagement.lifecycle.cancelevent.CancelEvent.CancelEventError;
 import org.pragmatica.example.ticketing.eventmanagement.lifecycle.cancelevent.CancelEvent.Request;
 
 import org.junit.jupiter.api.Test;
@@ -21,164 +20,113 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 
 class CancelEventTest {
-    // In-memory fake of the @PgSql store. A guarded cancel returns an empty projection only when the
-    // event is absent, mirroring `UPDATE ... WHERE id = :id RETURNING id`.
-    private static final class FakeStore implements EventStore {
-        private final Map<UUID, EventRow> events = new HashMap<>();
-        private final Map<UUID, String> seats = new HashMap<>();
-
-        @Override
-        public Promise<Unit> insertEvent(UUID id, String venue, String onSaleAt) {
-            events.put(id, new EventRow("draft", onSaleAt));
-
-            return Promise.UNIT;
-        }
-
-        @Override
-        public Promise<Boolean> eventExists(UUID id) {
-            return Promise.success(events.containsKey(id));
-        }
-
-        @Override
-        public Promise<Unit> insertSeat(UUID id,
-                                        UUID eventId,
-                                        String section,
-                                        String seatRow,
-                                        int number,
-                                        String tier) {
-            seats.put(id, "available");
-
-            return Promise.UNIT;
-        }
-
-        @Override
-        public Promise<Option<RowId>> openEvent(UUID id) {
-            return Promise.success(Option.empty());
-        }
-
-        @Override
-        public Promise<Option<RowId>> cancelEvent(UUID id) {
-            return cancel(id);
-        }
-
-        @Override
-        public Promise<Option<RowId>> blockSeat(UUID id) {
-            return Promise.success(Option.empty());
-        }
-
-        @Override
-        public Promise<Option<RowId>> releaseSeat(UUID id) {
-            return Promise.success(Option.empty());
-        }
-
-        @Override
-        public Promise<Option<EventRow>> findEvent(UUID id) {
-            return Promise.success(Option.option(events.get(id)));
-        }
-
-        @Override
-        public Promise<Unit> markSeatSold(UUID id) {
-            return Promise.UNIT;
-        }
-
-        @Override
-        public Promise<Unit> markSeatAvailable(UUID id) {
-            return Promise.UNIT;
-        }
-
-        private Promise<Option<RowId>> cancel(UUID id) {
-            var existing = events.get(id);
-
-            if (existing == null) {
-                return Promise.success(Option.empty());
-            }
-
-            events.put(id, new EventRow("cancelled", existing.onSaleAt()));
-
-            return Promise.success(Option.present(new RowId(id)));
-        }
-    }
-
-    // In-memory fake whose every operation fails, simulating a store outage. Used to prove the slice
-    // maps a store failure onto its own typed StoreUnavailable.
-    private static final class FailingStore implements EventStore {
-        private static final Cause STORE_DOWN = Causes.cause("simulated store outage");
-
-        @Override
-        public Promise<Unit> insertEvent(UUID id, String venue, String onSaleAt) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Boolean> eventExists(UUID id) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Unit> insertSeat(UUID id,
-                                        UUID eventId,
-                                        String section,
-                                        String seatRow,
-                                        int number,
-                                        String tier) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Option<RowId>> openEvent(UUID id) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Option<RowId>> cancelEvent(UUID id) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Option<RowId>> blockSeat(UUID id) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Option<RowId>> releaseSeat(UUID id) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Option<EventRow>> findEvent(UUID id) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Unit> markSeatSold(UUID id) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Unit> markSeatAvailable(UUID id) {
-            return STORE_DOWN.promise();
-        }
-    }
-
-    private final FakeStore store = new FakeStore();
+    private final InMemoryEventStore store = new InMemoryEventStore();
     private final CancelEvent slice = CancelEvent.cancelEvent(store);
 
-    @Test
-    void execute_existingEvent_succeeds() {
+    /// Models the race window the guard cannot close: the guarded `UPDATE` matches no row, yet the
+    /// follow-up read still reports a status the guard admits (`draft`), so the refusal has no settled
+    /// explanation.
+    private static final class RefusingCancelStore extends InMemoryEventStore {
+        @Override
+        public Promise<Option<RowId>> cancelEvent(UUID id) {
+            return Promise.success(Option.none());
+        }
+    }
+
+    private static UUID draftEventIn(InMemoryEventStore target) {
         var id = UUID.randomUUID();
 
-        store.insertEvent(id, "Wembley Arena", "2026-07-01T19:00:00Z").await();
+        target.insertEvent(id, "Wembley Arena", "2026-07-01T19:00:00Z").await();
+
+        return id;
+    }
+
+    private UUID draftEvent() {
+        return draftEventIn(store);
+    }
+
+    @Test
+    void execute_draftEvent_cancels() {
+        var id = draftEvent();
+
+        slice.execute(new Request(id.toString()))
+             .await()
+             .onFailure(cause -> fail(cause.message()))
+             .onSuccess(response -> assertThat(response.event()).isEqualTo(id.toString()));
+        store.eventStatusOf(id)
+             .onEmpty(() -> fail("Expected event " + id + " to exist"))
+             .onPresent(status -> assertThat(status).isEqualTo(EventStatus.CANCELLED));
+    }
+
+    @Test
+    void execute_onSaleEvent_cancels() {
+        var id = draftEvent();
+
+        store.openEvent(id).await();
+        slice.execute(new Request(id.toString())).await().onFailure(cause -> fail(cause.message()));
+        store.eventStatusOf(id)
+             .onEmpty(() -> fail("Expected event " + id + " to exist"))
+             .onPresent(status -> assertThat(status).isEqualTo(EventStatus.CANCELLED));
+    }
+
+    /// Cancelling twice must remain a success -- the caller's intent already holds.
+    @Test
+    void execute_alreadyCancelledEvent_reportsSuccess() {
+        var id = draftEvent();
+
+        slice.execute(new Request(id.toString())).await();
         slice.execute(new Request(id.toString()))
              .await()
              .onFailure(cause -> fail(cause.message()))
              .onSuccess(response -> assertThat(response.event()).isEqualTo(id.toString()));
     }
 
+    /// The (c) regression: `cancelEvent` was an unguarded `UPDATE ... WHERE id = :id`, so a repeat cancel
+    /// re-stamped the terminal row and reported success without ever looking at the current status. With
+    /// the guard in place the repeat matches no row, so the slice *must* consult the current status to
+    /// decide -- which a failing `findEvent` makes observable.
+    @Test
+    void cancelEvent_repeatCancel_consultsCurrentStatus() {
+        var failing = new FailingEventStore(FailOp.FIND_EVENT);
+        var id = draftEventIn(failing);
+        var failingSlice = CancelEvent.cancelEvent(failing);
+
+        failingSlice.execute(new Request(id.toString())).await().onFailure(cause -> fail(cause.message()));
+        failingSlice.execute(new Request(id.toString()))
+                    .await()
+                    .onSuccess(_ -> fail("Expected the repeat cancel to be refused and then diagnosed"))
+                    .onFailure(cause -> assertThat(cause.message()).contains("unavailable"));
+    }
+
+    /// A concurrent lifecycle change can land between the guarded `UPDATE` and the read that diagnoses it:
+    /// the guard refuses, yet the event still reads `draft`, which the guard admits. That window has no
+    /// settled explanation and must not be passed off as the idempotent "already cancelled" success.
+    @Test
+    void cancelEvent_refusedWhileStillDraft_returnsTransitionRaced() {
+        var racing = new RefusingCancelStore();
+        var id = draftEventIn(racing);
+
+        CancelEvent.cancelEvent(racing)
+                   .execute(new Request(id.toString()))
+                   .await()
+                   .onSuccess(_ -> fail("Expected the refused transition to be diagnosed as a race"))
+                   .onFailure(cause -> assertThat(cause).isInstanceOf(CancelEventError.TransitionRaced.class));
+    }
+
+    /// A raced transition is a client-visible conflict, not a server fault. The cause used to live outside
+    /// this slice's package, so the generated router could not see it and fell through to HTTP 500.
+    @Test
+    void errorMapper_transitionRaced_mapsToConflict() {
+        assertThat(new CancelEventRoutes().errorMapper()
+                                          .map(CancelEventError.transitionRaced(EventStatus.DRAFT))
+                                          .status()).isEqualTo(HttpStatus.CONFLICT);
+    }
+
     @Test
     void execute_unknownEvent_returnsEventNotFound() {
         slice.execute(new Request(UUID.randomUUID().toString()))
              .await()
-             .onSuccess(response -> fail("Expected EventNotFound"))
+             .onSuccess(_ -> fail("Expected EventNotFound"))
              .onFailure(cause -> assertThat(cause.message()).contains("not found"));
     }
 
@@ -186,17 +134,17 @@ class CancelEventTest {
     void execute_malformedId_returnsValidationFailure() {
         slice.execute(new Request("not-a-uuid"))
              .await()
-             .onSuccess(response -> fail("Expected validation failure"))
+             .onSuccess(_ -> fail("Expected validation failure"))
              .onFailure(cause -> assertThat(cause.message()).contains("valid UUID"));
     }
 
     @Test
     void execute_storeFails_returnsStoreUnavailable() {
-        var failing = CancelEvent.cancelEvent(new FailingStore());
+        var failing = CancelEvent.cancelEvent(FailingEventStore.allOperationsFail());
 
         failing.execute(new Request(UUID.randomUUID().toString()))
                .await()
-               .onSuccess(response -> fail("Expected StoreUnavailable"))
+               .onSuccess(_ -> fail("Expected StoreUnavailable"))
                .onFailure(cause -> assertThat(cause.message()).contains("unavailable"));
     }
 }

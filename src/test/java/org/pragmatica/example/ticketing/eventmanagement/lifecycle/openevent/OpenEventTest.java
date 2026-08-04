@@ -1,17 +1,16 @@
 package org.pragmatica.example.ticketing.eventmanagement.lifecycle.openevent;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 
+import org.pragmatica.http.HttpStatus;
 import org.pragmatica.lang.Cause;
 import org.pragmatica.lang.Option;
 import org.pragmatica.lang.Promise;
-import org.pragmatica.lang.Unit;
-import org.pragmatica.lang.utils.Causes;
-import org.pragmatica.example.ticketing.eventmanagement.EventStore;
-import org.pragmatica.example.ticketing.eventmanagement.EventStore.EventRow;
+import org.pragmatica.example.ticketing.eventmanagement.EventStatus;
 import org.pragmatica.example.ticketing.eventmanagement.EventStore.RowId;
+import org.pragmatica.example.ticketing.eventmanagement.FailingEventStore;
+import org.pragmatica.example.ticketing.eventmanagement.InMemoryEventStore;
+import org.pragmatica.example.ticketing.eventmanagement.lifecycle.openevent.OpenEvent.OpenEventError;
 import org.pragmatica.example.ticketing.eventmanagement.lifecycle.openevent.OpenEvent.Request;
 
 import org.junit.jupiter.api.Test;
@@ -21,194 +20,123 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 
 class OpenEventTest {
-    // In-memory fake of the @PgSql store. Guarded transitions mirror the SQL `... WHERE status = <from>
-    // RETURNING id`: an out-of-state row yields an empty projection, exactly as the database would.
-    private static final class FakeStore implements EventStore {
-        private final Map<UUID, EventRow> events = new HashMap<>();
-        private final Map<UUID, String> seats = new HashMap<>();
-
-        @Override
-        public Promise<Unit> insertEvent(UUID id, String venue, String onSaleAt) {
-            events.put(id, new EventRow("draft", onSaleAt));
-
-            return Promise.UNIT;
-        }
-
-        @Override
-        public Promise<Boolean> eventExists(UUID id) {
-            return Promise.success(events.containsKey(id));
-        }
-
-        @Override
-        public Promise<Unit> insertSeat(UUID id,
-                                        UUID eventId,
-                                        String section,
-                                        String seatRow,
-                                        int number,
-                                        String tier) {
-            seats.put(id, "available");
-
-            return Promise.UNIT;
-        }
-
-        @Override
-        public Promise<Option<RowId>> openEvent(UUID id) {
-            return transitionEvent(id, "draft", "on_sale");
-        }
-
-        @Override
-        public Promise<Option<RowId>> cancelEvent(UUID id) {
-            return Promise.success(Option.empty());
-        }
-
-        @Override
-        public Promise<Option<RowId>> blockSeat(UUID id) {
-            return Promise.success(Option.empty());
-        }
-
-        @Override
-        public Promise<Option<RowId>> releaseSeat(UUID id) {
-            return Promise.success(Option.empty());
-        }
-
-        @Override
-        public Promise<Option<EventRow>> findEvent(UUID id) {
-            return Promise.success(Option.option(events.get(id)));
-        }
-
-        @Override
-        public Promise<Unit> markSeatSold(UUID id) {
-            return Promise.UNIT;
-        }
-
-        @Override
-        public Promise<Unit> markSeatAvailable(UUID id) {
-            return Promise.UNIT;
-        }
-
-        private Promise<Option<RowId>> transitionEvent(UUID id, String from, String to) {
-            var existing = events.get(id);
-
-            if (existing == null || !existing.status().equals(from)) {
-                return Promise.success(Option.empty());
-            }
-
-            events.put(id, new EventRow(to, existing.onSaleAt()));
-
-            return Promise.success(Option.present(new RowId(id)));
-        }
-    }
-
-    // In-memory fake whose every operation fails, simulating a store outage. Used to prove the slice
-    // maps a store failure onto its own typed StoreUnavailable.
-    private static final class FailingStore implements EventStore {
-        private static final Cause STORE_DOWN = Causes.cause("simulated store outage");
-
-        @Override
-        public Promise<Unit> insertEvent(UUID id, String venue, String onSaleAt) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Boolean> eventExists(UUID id) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Unit> insertSeat(UUID id,
-                                        UUID eventId,
-                                        String section,
-                                        String seatRow,
-                                        int number,
-                                        String tier) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Option<RowId>> openEvent(UUID id) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Option<RowId>> cancelEvent(UUID id) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Option<RowId>> blockSeat(UUID id) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Option<RowId>> releaseSeat(UUID id) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Option<EventRow>> findEvent(UUID id) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Unit> markSeatSold(UUID id) {
-            return STORE_DOWN.promise();
-        }
-
-        @Override
-        public Promise<Unit> markSeatAvailable(UUID id) {
-            return STORE_DOWN.promise();
-        }
-    }
-
-    private final FakeStore store = new FakeStore();
+    private final InMemoryEventStore store = new InMemoryEventStore();
     private final OpenEvent slice = OpenEvent.openEvent(store);
 
-    @Test
-    void execute_draftEvent_marksOnSale() {
+    /// Models the race window the guard cannot close: the guarded `UPDATE` matches no row, yet the
+    /// follow-up read still reports `draft` -- the very status the guard admits.
+    private static final class RefusingOpenStore extends InMemoryEventStore {
+        @Override
+        public Promise<Option<RowId>> openEvent(UUID id) {
+            return Promise.success(Option.none());
+        }
+    }
+
+    private UUID draftEvent() {
         var id = UUID.randomUUID();
 
         store.insertEvent(id, "Wembley Arena", "2026-07-01T19:00:00Z").await();
+
+        return id;
+    }
+
+    @Test
+    void execute_draftEvent_marksOnSale() {
+        var id = draftEvent();
+
         slice.execute(new Request(id.toString()))
              .await()
              .onFailure(cause -> fail(cause.message()))
              .onSuccess(response -> assertThat(response.event()).isEqualTo(id.toString()));
+        store.eventStatusOf(id)
+             .onEmpty(() -> fail("Expected event " + id + " to exist"))
+             .onPresent(status -> assertThat(status).isEqualTo(EventStatus.ON_SALE));
     }
 
     @Test
     void execute_unknownEvent_returnsEventNotFound() {
         slice.execute(new Request(UUID.randomUUID().toString()))
              .await()
-             .onSuccess(response -> fail("Expected EventNotFound"))
+             .onSuccess(_ -> fail("Expected EventNotFound"))
              .onFailure(cause -> assertThat(cause.message()).contains("not found"));
     }
 
     @Test
     void execute_alreadyOpenEvent_returnsAlreadyOpen() {
-        var id = UUID.randomUUID();
+        var id = draftEvent();
 
-        store.insertEvent(id, "Wembley Arena", "2026-07-01T19:00:00Z").await();
         slice.execute(new Request(id.toString())).await();
         slice.execute(new Request(id.toString()))
              .await()
-             .onSuccess(response -> fail("Expected AlreadyOpen"))
+             .onSuccess(_ -> fail("Expected AlreadyOpen"))
              .onFailure(cause -> assertThat(cause.message()).contains("already open"));
+    }
+
+    /// The H8(b) regression: every refused open was reported as "already open", so a cancelled event
+    /// produced a 409 stating something that was simply not true.
+    @Test
+    void openEvent_cancelledEvent_returnsCancelledNotAlreadyOpen() {
+        var id = draftEvent();
+
+        store.cancelEvent(id).await();
+        slice.execute(new Request(id.toString()))
+             .await()
+             .onSuccess(_ -> fail("Expected a cancelled event to refuse opening"))
+             .onFailure(OpenEventTest::assertCancelledAndNotAlreadyOpen);
+    }
+
+    private static void assertCancelledAndNotAlreadyOpen(Cause cause) {
+        assertThat(cause).isEqualTo(OpenEventError.LifecycleConflict.EVENT_CANCELLED);
+        assertThat(cause.message()).contains("cancelled").doesNotContain("already open");
+    }
+
+    /// A concurrent lifecycle change can land between the guarded `UPDATE` and the read that diagnoses it,
+    /// leaving a refusal the read cannot account for. That window is reported as its own cause rather than
+    /// being folded into `AlreadyOpen`.
+    @Test
+    void openEvent_refusedWhileStillDraft_returnsTransitionRaced() {
+        var racing = new RefusingOpenStore();
+        var id = UUID.randomUUID();
+
+        racing.insertEvent(id, "Wembley Arena", "2026-07-01T19:00:00Z").await();
+        OpenEvent.openEvent(racing)
+                 .execute(new Request(id.toString()))
+                 .await()
+                 .onSuccess(_ -> fail("Expected the refused transition to be diagnosed as a race"))
+                 .onFailure(cause -> assertThat(cause).isInstanceOf(OpenEventError.TransitionRaced.class));
+    }
+
+    /// Both lifecycle refusals are client-visible conflicts. They used to live outside this slice's package,
+    /// so the generated router could not see them and fell through to HTTP 500; these two tests pin the 409.
+    @Test
+    void errorMapper_eventCancelled_mapsToConflict() {
+        assertMappedStatus(OpenEventError.eventCancelled(), HttpStatus.CONFLICT);
+    }
+
+    @Test
+    void errorMapper_transitionRaced_mapsToConflict() {
+        assertMappedStatus(OpenEventError.transitionRaced(EventStatus.DRAFT), HttpStatus.CONFLICT);
+    }
+
+    private static void assertMappedStatus(Cause cause, HttpStatus expected) {
+        assertThat(new OpenEventRoutes().errorMapper().map(cause).status()).isEqualTo(expected);
     }
 
     @Test
     void execute_malformedId_returnsValidationFailure() {
         slice.execute(new Request("not-a-uuid"))
              .await()
-             .onSuccess(response -> fail("Expected validation failure"))
+             .onSuccess(_ -> fail("Expected validation failure"))
              .onFailure(cause -> assertThat(cause.message()).contains("valid UUID"));
     }
 
     @Test
     void execute_storeFails_returnsStoreUnavailable() {
-        var failing = OpenEvent.openEvent(new FailingStore());
+        var failing = OpenEvent.openEvent(FailingEventStore.allOperationsFail());
 
         failing.execute(new Request(UUID.randomUUID().toString()))
                .await()
-               .onSuccess(response -> fail("Expected StoreUnavailable"))
+               .onSuccess(_ -> fail("Expected StoreUnavailable"))
                .onFailure(cause -> assertThat(cause.message()).contains("unavailable"));
     }
 }

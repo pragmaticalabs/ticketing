@@ -32,12 +32,29 @@ public interface BlockSeat {
             }
         }
 
+        /// Client-facing validation refusal (HTTP 400): a request field could not be parsed into its
+        /// domain type. Declared in this slice's own hierarchy instead of letting the shared
+        /// value-object cause through, because the slice processor builds the router's error switch
+        /// from the `Cause` types in this package alone -- a shared cause arrives unmatched and falls
+        /// through to HTTP 500. Data-carrying, so the response names the offending field and keeps the
+        /// original reason.
+        record InvalidRequest(String field, String detail) implements BlockSeatError {
+            @Override
+            public String message() {
+                return "Invalid request field '" + field + "': " + detail;
+            }
+        }
+
         static BlockSeatError seatUnavailable() {
             return new SeatUnavailable();
         }
 
         static BlockSeatError storeUnavailable() {
             return new StoreUnavailable();
+        }
+
+        static BlockSeatError invalidSeat(Cause cause) {
+            return new InvalidRequest("seat", cause.message());
         }
     }
 
@@ -50,6 +67,7 @@ public interface BlockSeat {
             @Override
             public Promise<Response> execute(Request request) {
                 return SeatId.seatId(request.seat())
+                             .mapError(BlockSeatError::invalidSeat)
                              .async()
                              .flatMap(this::doBlock);
             }
