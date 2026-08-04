@@ -1,6 +1,6 @@
 # Aether Runtime — DX Wish List
 
-**From:** the ticketing posterchild (`org.pragmatica.example.ticketing`), built on Pragmatica/Aether/JBCT `1.0.0-rc2`.
+**From:** the ticketing posterchild (`org.pragmatica.example.ticketing`), built on Pragmatica/Aether/JBCT `1.0.0-rc3`.
 **To:** the Aether runtime/toolchain maintainers.
 **Why this exists:** this repo's stated purpose is "test our own tool" — build the book's full event-ticketing
 platform as real Aether slices and surface the friction a HelloWorld never hits. This is that friction,
@@ -13,28 +13,41 @@ prioritized, with concrete reproductions from the build so each item is actionab
 
 ## Priority summary
 
-| # | Item | Component | Priority | Why |
-|---|------|-----------|----------|-----|
-| 1 | Error→HTTP **totality check** at compile time | slice-processor + http-routing | **P0** | silent 500s |
-| 2 | Pub-sub **Promise honesty** (don't discard subscriber result) | infra-pubsub | **P0** | silent data loss |
-| 3 | **Auto-discover migrations** (kill `migrations.list`) | pg-codegen | **P0** | silent skip |
-| 4 | **VO↔column mapping** (use VOs in `@Query`, not raw types) | pg-codegen | **P1** | pervasive ceremony |
-| 5 | `aether verify` — **whole-contract static check** | new mojo | **P1** | many late failures |
-| 6 | **Typed** error→status (`@HttpStatus`), not glob-on-simple-names | routing | **P1** | fragile, drifts |
-| 7 | **Scaffold/validate** the 4 TOMLs from annotations | maven plugin | **P1** | config sprawl |
-| 8 | Support **text-block `@Query`** | pg-codegen | **P1** | forced concatenation |
-| 9 | Forge archive must **bundle resource providers** + fail fast | forge | **P1** | can't run live |
-| 10 | Ship **`@Scheduled`/`@Heartbeat`** | runtime | **P1** | workaround-forcing |
-| 11 | **Shape-aware lint** (exempt transport/row/fact records) | jbct-lint | **P1** | ~76 false suppressions |
-| 12 | **Canonical-name codegen** + adversarial fixtures | slice-processor | **P2** | (2 bugs already fixed) |
-| 13 | Clear errors: **multi-param method**, **15-dep cap**, **data-modifying CTE** | several | **P2** | cryptic crashes |
-| 14 | Tangential ideas (typed topics, observability aspect, test kit, …) | various | **P2** | future polish |
+**Status legend:** ✅ landed and adopted here · 🟡 landed but only partly usable · ⬜ still open.
+Statuses are as of **rc3** and are verified against this repo's code, not against a changelog. The
+per-item sections below retain the original problem statements; where an item has landed, the section
+says so.
+
+| # | Item | Component | Priority | Status (rc3) | Why |
+|---|------|-----------|----------|--------------|-----|
+| 1 | Error→HTTP **totality check** at compile time | slice-processor + http-routing | **P0** | ✅ `strict = true` in all 19 routed slices | silent 500s |
+| 2 | Pub-sub **Promise honesty** (don't discard subscriber result) | infra-pubsub | **P0** | 🟡 error strategies exist; delivery still at-most-once here | silent data loss |
+| 3 | **Auto-discover migrations** (kill `migrations.list`) | pg-codegen | **P0** | ✅ manifest deleted, build green | silent skip |
+| 4 | **VO↔column mapping** (use VOs in `@Query`, not raw types) | pg-codegen | **P1** | ✅ shipped as `ValueMapping<T,P>`; adopted for `SeatState`/`PriceTier` | pervasive ceremony |
+| 5 | `aether verify` — **whole-contract static check** | new mojo | **P1** | ⬜ | many late failures |
+| 6 | **Typed** error→status (`@HttpStatus`), not glob-on-simple-names | routing | **P1** | ⬜ | fragile, drifts |
+| 7 | **Scaffold/validate** the 4 TOMLs from annotations | maven plugin | **P1** | ⬜ | config sprawl |
+| 8 | Support **text-block `@Query`** | pg-codegen | **P1** | ✅ used throughout | forced concatenation |
+| 9 | Forge archive must **bundle resource providers** + fail fast | forge | **P1** | ⬜ live E2E still blocked | can't run live |
+| 10 | Ship **`@Scheduled`/`@Heartbeat`** | runtime | **P1** | ✅ `Scheduled` adopted for `SweepHolds`; no `@Heartbeat` | workaround-forcing |
+| 11 | **Shape-aware lint** (exempt transport/row/fact records) | jbct-lint | **P1** | 🟡 VO-01 bulk gone; 33 sites / 53 tokens remain | ~76 false suppressions |
+| 12 | **Canonical-name codegen** + adversarial fixtures | slice-processor | **P2** | 🟡 2 fixed, **a 3rd found on rc3** (#15) | (2 bugs already fixed) |
+| 13 | Clear errors: **multi-param method**, **15-dep cap**, **data-modifying CTE** | several | **P2** | 🟡 2 of 3; the cap is *worked around*, not gone | cryptic crashes |
+| 14 | Tangential ideas (typed topics, observability aspect, test kit, …) | various | **P2** | 🟡 typed `Topic<T>` ✅, idempotency interceptor ✅ | future polish |
+| **15** | **Hyphen in an interceptor config generates uncompilable code** | slice-processor | **P0** | ⬜ **new on rc3** | build-breaking |
+| **16** | **Interceptors attach only to slice methods** — no aspect for an internal call | resource-interceptors | **P1** | ⬜ **new on rc3** | retry/CB unusable |
+| **17** | **Retry and metrics interceptors are unprovisionable from TOML** | resource-interceptors | **P1** | ⬜ **new on rc3** | declared, unusable |
+| **18** | **`JBCT-ORD-01` is unsatisfiable for a slice impl record** — the rule and the slice shape disagree | jbct-lint | **P1** | ⬜ **new** | 24 forced suppressions |
 
 ---
 
 ## P0 — silent-failure / correctness traps
 
-### 1. Compile-time error→HTTP **totality** check
+### 1. Compile-time error→HTTP **totality** check — ✅ LANDED in rc2, adopted here
+**Status.** `ErrorMappingValidator` ships; `[errors] strict = true` turns an unmapped `Cause` into a
+build failure (it only warns by default). **Enabled in all 19 routed slices here.** The problem
+statement below is kept because the *default* is still permissive, and because the glob-on-simple-name
+matching it validates is still the fragile part (#6).
 **Problem.** A slice's failure set is a *closed* sealed `Cause` hierarchy, but its HTTP mapping lives in a
 separate `routes.toml` matched by **globs over simple names** (`HTTP_400 = ["*Blank*"]`). Nothing forces the
 two to agree, so a new error type silently falls through to the `default` (500), and a stale pattern silently
@@ -42,7 +55,10 @@ matches nothing.
 **Evidence (this session).** Adding `CreateEventError.MalformedOnSaleAt` and `Percent.NonPositive` compiled
 green and would have returned **500 instead of 400** — caught only by a manual doc/code reconciliation audit,
 not the compiler. Separately, `setprice/routes.toml` carried a dead `HTTP_404 = ["*PriceNotFound*"]` matching
-zero causes (SetPrice only declares `StoreUnavailable`).
+zero causes (SetPrice only declared `StoreUnavailable`). *Both cause names in that second example are the
+pre-enum-grouping ones in force at the time; today SetPrice declares `ServiceUnavailable.PRICING_STORE`, and
+the dead `HTTP_404` line is gone from that file. The trap it demonstrates — a stale pattern matching nothing —
+is unchanged.*
 **Proposal.** At compile time, diff each routed slice's sealed `Cause` hierarchy against its `routes.toml`:
 fail the build if any `Cause` record is unmapped, and warn if any pattern matches zero causes.
 **Acceptance.** A slice with an unmapped failure record fails `mvn compile` with a message naming the record
@@ -66,7 +82,9 @@ retry/backoff/DLQ + an idempotency-key resource; or **(b)** change the signature
 **Acceptance.** Either a subscriber failure visibly triggers redelivery/DLQ, or the signature no longer implies
 one. A doc table states the delivery guarantee per impl.
 
-### 3. **Auto-discover** migrations
+### 3. **Auto-discover** migrations — ✅ LANDED in rc2, adopted here
+**Status.** `SchemaLoader` globs `V*__*.sql` from the schema directory. **`migrations.list` is
+deleted from this repo and the build is green without it** — the acceptance criterion below is met.
 **Problem.** pg-codegen probes a *hardcoded* filename list; a migration whose name isn't in it is **silently
 skipped**, so every table in it reads "not found" at compile time even though the DDL exists. The workaround is
 a hand-maintained `src/main/resources/schema/migrations.list`.
@@ -80,7 +98,11 @@ override-only). If a manifest stays, a migration on disk but absent from it shou
 
 ## P1 — high-leverage DX
 
-### 4. VO↔column mapping — use value objects in `@Query`, not raw types
+### 4. VO↔column mapping — use value objects in `@Query`, not raw types — ✅ LANDED in rc2 as `ValueMapping<T,P>`
+**Status.** Shipped as `ValueMapping<T,P>` (absorbed this proposal, #397): the VO declares
+`static ValueMapping<Vo,P> valueMapping()`, which drives row decode, `:param` binding and HTTP
+path/query binding. **Adopted here for `SeatState` and `PriceTier`** at the store boundaries. The
+original problem statement and the design rationale in §A are kept for the record.
 **Problem.** `@PgSql` methods and row records must use raw `UUID`/`String`/`long`, so every slice hand-unwraps
 VOs going in and re-parses them coming out.
 **Evidence (this session).** `store.findStatus(seatId.value().value())` (SeatId→Uuid→UUID) on the way in;
@@ -143,13 +165,15 @@ provider should fail at deploy with **"no provider for @Http"**, not an opaque l
 version/launcher drift.
 **Acceptance.** A clean rc archive runs the full 23-slice blueprint end-to-end.
 
-### 10. Ship `@Scheduled` / `@Heartbeat`
-**Problem.** rc1/rc2 have no scheduled-trigger annotation, so periodic work (a hold-expiry sweep) must be
-modeled as an HTTP endpoint — which *misrepresents the design* (it's an Iteration/cron concern, not an API).
-**Evidence (this session).** `SweepHolds` is an HTTP slice purely because `@Heartbeat` doesn't exist.
-**Proposal.** A scheduled-trigger resource (`@Scheduled("*/5 * * * *")` / `@Heartbeat`) wiring a zero-input
-slice method.
-**Acceptance.** The sweep attaches to a schedule with no HTTP route.
+### 10. Ship `@Scheduled` / `@Heartbeat` — ✅ `Scheduled` LANDED in rc2, adopted here
+**Status.** `Scheduled` is real — a zero-parameter `Promise<Unit>` method, interval or cron,
+KV-tracked — and **`SweepHolds` now uses it** (`sweep()` behind a custom `@SweepSchedule` qualifier,
+60s). The operator HTTP route is kept alongside so a sweep can still be forced by hand. There is
+still no `@Heartbeat`. Adoption caveat worth generalizing: `@ResourceQualifier` is
+`@Target(ANNOTATION_TYPE)` only, so *every* `Scheduled` method needs a hand-written wrapper
+annotation — the same ceremony the pub-sub qualifiers need.
+**Was.** rc1/rc2 had no scheduled-trigger annotation, so periodic work (a hold-expiry sweep) had to be
+modeled as an HTTP endpoint — which *misrepresented the design* (an Iteration/cron concern, not an API).
 
 ### 11. Shape-aware lint (stop false-positiving on framework shapes)
 **Problem.** `JBCT-VO-01` ("record needs a factory") fires on records that legitimately have none — slice
@@ -158,16 +182,42 @@ slice method.
 record body (a measurement artifact).
 **Evidence (this session).** ~**76** suppressions were needed to reach 0 warnings — 59 VO-01 (all transport/row/
 fact/DTO records) + 17 SEQ-01 (impl-record decls). Zero were real gaps.
+**Progress (rc2).** VO-01 now exempts `@Slice`/`@PgSql` framework shapes, and **53 of the redundant
+VO-01 suppressions were removed.** The VO-01 line is down to 3 (the `shared.event` fact records).
+**Where it stands now.** `src/main/java` carries **33 suppression sites / 53 rule tokens**: 24
+`JBCT-ORD-01`, 20 `JBCT-SEQ-01`, 6 `JBCT-UC-02`, 3 `JBCT-VO-01` (20 sites carry SEQ-01 and ORD-01
+together). The SEQ-01 block is the measurement artifact above, untouched. The UC-02 block is the six
+slices whose trigger is a fact or a timer rather than a `Request`. The ORD-01 block is a separate,
+harder problem — see **#18**, which must be resolved before the acceptance below is reachable.
 **Proposal.** Teach the linter the framework's shapes: auto-exempt `@Slice`-nested `Request`/`Response`,
 `@PgSql` row records, and `@ResourceQualifier` fact records from VO-01; make SEQ-01 count a single method's
 chain, not a record body. Net: those ~76 suppressions disappear.
 **Acceptance.** The ticketing repo passes `jbct check` with **0 warnings and 0 suppressions**.
 
+### 18. `JBCT-ORD-01` is unsatisfiable for a slice implementation record
+**Problem.** ORD-01 orders type members by kind, ranking a nested `record` (0) ahead of a `static`
+factory (3). The Aether slice contract puts the implementation record **inside** the body of its own
+static factory method — so the record is lexically contained by the very declaration ORD-01 wants it
+to precede. No reordering of members can satisfy the rule; only abandoning the slice shape can. This
+is a genuine disagreement between a JBCT lint rule and the runtime's mandated shape, not a defect in
+either the rule's intent or the code: **one of the two has to give, and it should not be the shape**,
+because the nesting is what keeps the implementation private to its factory.
+**Evidence (this repo).** All **24** slices suppress it at the impl-record declaration, each with the
+reason on the line above; 20 of those sites carry `JBCT-SEQ-01` in the same annotation. That is a
+100 % false-positive rate for the rule on this codebase — the failure mode is not the warning, it is
+that a rule which is always wrong teaches people to suppress without reading.
+**Proposal.** Exempt a record declared inside a method body from ORD-01 altogether. Member ordering is
+a *type-body* concern; a method-local record has no sibling members to be ordered against, so the rule
+has nothing meaningful to say about it. Narrower alternative if that is too broad: exempt a
+method-local record whose name matches its enclosing method (the slice factory idiom exactly).
+**Acceptance.** A slice written exactly as `CreateEvent` is — impl record nested in its factory —
+passes `jbct check` with no ORD-01 warning and no suppression.
+
 ---
 
 ## P2 — robustness, clarity, and the long tail
 
-### 12. Canonical-name codegen + adversarial fixtures *(2 instances already fixed — capture the lesson)*
+### 12. Canonical-name codegen + adversarial fixtures *(2 fixed — and a 3rd found on rc3, see #15)*
 Both codegen bugs found this session were the same root cause: emitting *simple* type names where Java shadows
 them. **(a)** A factory's inner record `implements BuyTicket` shadowed the injected `QuotePrice.Request`/
 `Response` (JLS §6.5.5.2). **(b)** Duplicate single-type imports for two error types sharing a simple name. Both
@@ -181,21 +231,32 @@ code fails to compile, the error lands far from the cause — **attribute genera
 - **Multi-param slice method** crashes route generation (`parameterType()` assumes one). Either support multi-
   param (bind to path/body) or emit "a slice method takes exactly one request record." *(The one-param rule is
   arguably good design — it forced clean Request records — but it should be enforced with a message, not a crash.)*
-- **15 transitive-dep cap** surfaces as `Too many dependencies (N) for Promise.all()`. Document it, chunk
-  internally, or raise it. *(Interesting: this cap is what made interface-segregation/synchronous-read tradeoffs
-  legible — a constraint that shaped architecture. Keep the constraint, fix the message.)*
+- **15 transitive-dep cap** surfaced as `Too many dependencies (N) for Promise.all()`. **Partly
+  addressed:** rc2 added `BatchedAll` in the slice-processor's *generator*, which chunks a generated
+  factory's dependency list (fail-fast preserved). **The cap itself is not gone** — core's
+  `Promise.all` still tops out at `Mapper15`, so hand-written code hits the same wall with the same
+  message. Worth stating precisely in the docs, because "the cap is gone" is the natural shorthand
+  and it is wrong. *(The cap is what made interface-segregation/synchronous-read tradeoffs legible —
+  a constraint that shaped architecture. Keep the constraint, fix the message.)*
 - **Data-modifying CTEs** mis-validate silently in pg-codegen — make it a clear "unsupported" error.
 
 ### 14. Tangential / speculative (explicitly low-probability, as requested)
 - **First-class typed topics.** `Topic<SeatSold>` instead of a bare kebab-string `config="seat-sold"` (plus the
   historical `messaging.`-prefix confusion) → publisher/subscriber type-safe by construction, topic strings in
-  one place.
+  one place. **✅ SHIPPED and adopted** — `Topic.of("seat-sold", SeatSold.class)` constants live on each
+  fact record. Residual: the blueprint generator still validates one `resources.toml` section per
+  *resolved* topic name, so the kebab-case sections must stay.
 - **One descriptor, many boundaries.** Generalize the `PgRepr` of #4 to a neutral `Repr<T,P>` that *also* drives
   HTTP path/body binding and fact codecs — so `Request(SeatId seat)` auto-lifts the path segment (parse failure
   → typed 400) from the *same* one-line declaration. Kills "raw types at every boundary" holistically.
 - **Idempotency/dedup as a subscriber resource** (since convergence/projection is *the* pattern).
+  **✅ SHIPPED** — `IdempotencyInterceptorFactory` / `IdempotencyMethodInterceptor` /
+  `IdempotencyConfig` are in `resource-interceptors`. Not adopted here only because the projections
+  are already monotonic by per-seat version guard, which makes dedup redundant for this shape.
 - **Observability as a slice-boundary aspect.** The slice boundary is a natural trace span; a built-in per-slice
   tracing/metrics aspect would deliver the "uniform observability (Aspects)" the design already promises.
+  **Partly shipped** — `LoggingMethodInterceptor` and `MetricsMethodInterceptor` exist; logging is
+  adopted here on the 5 fact consumers, metrics is not adoptable from TOML (#17).
 - **Slice test kit.** Spin a slice with fakes/testcontainers + a typed client, so end-to-end slice tests don't
   need the full forge.
 - **Schema-derived row types.** Derive `@PgSql` row records from the schema (or diff field↔column names with a
@@ -204,13 +265,93 @@ code fails to compile, the error lands far from the cause — **attribute genera
   a warning would help (latent in any slice-per-use-case + shared-VO codebase).
 - **Rename "Aether Store."** The term means `@PgSql` persistence — *not* a KV store, *not* the consensus KV —
   and `CLAUDE.md` literally has to warn about it. A clearer name removes a standing conceptual tripwire.
-- **Local slice-processor patched-jar fragility.** The build depends on a locally-installed patched
-  `slice-processor:1.0.0-rc2`; it went stale mid-session and re-triggered an already-fixed codegen bug until
-  rebuilt. Publishing the official rc2 (or a clear "your processor jar predates fix X" check) removes this.
+- **Local patched-jar fragility — resolved for the processor, replaced by a bigger one.** The build no
+  longer depends on a hand-patched `slice-processor`: the official rc2 carries both PR #364 fixes.
+  But the project now pins **rc3, which is not published at all**, so the *entire* dependency line is
+  a local `mvn install` — a strictly larger version of the same fragility. See the release-completeness
+  addendum.
+
+---
+
+## New on rc3 — found while adopting interceptors
+
+### 15. A hyphen in an interceptor config generates uncompilable code — **P0**
+**Problem.** An interceptor `@ResourceQualifier(config = "cache.availability.seat-status")` makes the
+slice-processor emit an **illegal Java identifier**. The generator translates `.` → `_` when deriving
+the identifier from the config path but leaves `-` untouched, so the generated code contains a name
+with a hyphen in it and does not compile. The error surfaces in generated code, far from the
+annotation that caused it.
+**Evidence (this session).** Hit on the first interceptor added. **Workaround in force: every
+interceptor config section in this repo is spelled with underscores** (`cache.availability.seat_status`,
+`log.quote.project_price`). The bug is specific to *interceptor* configs — `[scheduling.sweep-holds]`
+and the kebab-case topic sections (`[seat-sold]`) compile normally, which is exactly why it went
+unnoticed until interceptors were adopted, and why it is easy to hit: hyphens are the established
+house style for every *other* config section.
+**Proposal.** Sanitize the whole path when deriving an identifier (translate any non-identifier
+character, not just `.`), or reject a hyphenated interceptor config at the annotation site with a
+located error naming the offending section.
+**Acceptance.** `config = "cache.availability.seat-status"` either compiles or fails at the
+annotation with a clear message. **This is the third codegen bug this project has found in the rc
+series** — the same lesson as #12: generated identifiers and references need a canonical, total
+transformation, plus fixtures for the inputs house style guarantees.
+
+### 16. Interceptors attach only to slice methods — so retry/circuit-breaking is unusable where it is needed — **P1**
+**Problem.** A `MethodInterceptor` attaches to a `@Slice` interface method. Real resilience concerns
+attach to a single *outbound call*, which is almost never a whole slice method.
+**Evidence (this session).** The obvious candidate — retry + circuit-breaker around the `@Http`
+payment gateway — is **not adoptable**. The gateway calls are private helpers inside
+`BuyTicket`/`CancelTicket`, so the only attachable method is `execute`: the entire BER saga.
+Retrying it would re-run seat claiming and confirmation, not the payment call.
+**Worse, the breaker would trip on the designed outcome.** `CircuitBreakerInterceptorFactory` builds
+its breaker with `.withDefaultShouldTrip()`, and core's default is literally `shouldTrip(_ -> true)`
+(`CircuitBreaker.java`), so **every** typed `Cause` counts toward the failure threshold.
+`CircuitBreakerConfig` carries only `failureThreshold`, `resetTimeout` and `testAttempts` — there is
+**no way to supply a predicate**. On a hot event, `StateConflict.SEAT_UNAVAILABLE` — the *intended* result of the
+contended-seat design-out, not a fault — would count as failure and open the breaker, taking the buy
+path down precisely when it is working as designed.
+**Proposal.** Two things, independently useful: (a) let `CircuitBreakerConfig` carry a trip
+predicate (or default to tripping only on a designated "infrastructure failure" marker interface
+rather than on all `Cause`s); (b) offer an attachment point finer than a slice method — e.g.
+intercepting a *resource* call (`@Http` client method) rather than only a slice method.
+**Note on the structural fix.** In this codebase the right answer is to extract the gateway into its
+own `PaymentGateway` slice, whose `execute` *is* the payment call. That is a good design change
+regardless — but it should be a choice, not the only way to get a retry.
+**Acceptance.** A circuit breaker can be configured to ignore domain causes; retry can wrap a single
+outbound call without wrapping its caller's whole saga.
+
+### 17. Retry and metrics interceptors cannot be provisioned from TOML — **P1**
+**Problem.** Both are shipped and documented as interceptors, but their config records carry **Java
+objects that a TOML section cannot express**:
+- `RetryConfig(int maxAttempts, BackoffStrategy backoffStrategy)` — `BackoffStrategy` is a core
+  builder type (`Retry.BackoffStrategy.exponential()/fixed()`), not a value that can be bound from
+  config.
+- `MetricsConfig(String name, MeterRegistry registry, …)` — requires an injected micrometer
+  `MeterRegistry`.
+
+By contrast `CacheConfig` and `LogConfig` are TOML-expressible, which is why those two are the only
+interceptors this repo could actually adopt.
+**Proposal.** Give each a config surface that is fully declarative — e.g.
+`strategy = "exponential", initial = "100ms", max = "5s"` for retry — and resolve the registry from
+the runtime rather than requiring the caller to hold one.
+**Acceptance.** A retry or metrics interceptor can be declared entirely in `resources.toml`, like a
+cache.
+
+### Also evaluated on rc3 and deliberately deferred: declarative stream consumers
+Migrating the pub-sub consumers to declarative stream consumers was assessed and **deferred**. Three
+reasons, all from rc3's own sources/tests: cross-node failover is **explicitly disclaimed by the
+rc3 test suite**; `@PartitionKey` is a **no-op for a topic `Publisher`**; and the cursor advance is an
+**unconditional set**, so a failed handler still advances past its message. That last one reproduces
+the exact shape of #2 — an API that reads as if it offers a delivery guarantee it does not keep. The
+current at-most-once story is at least honest about itself.
 
 ---
 
 ## §A — VO↔column mapping, in detail (the design behind #4)
+
+> **Status: shipped in rc2 as `ValueMapping<T,P>` and adopted here** for `SeatState`/`PriceTier` at
+> the store boundaries — rows decode VOs via `RowDecodeError.guard(… .lift())`, so a corrupt column
+> value now fails typed at the row boundary. The design discussion below is kept because it records
+> *why* the shape is what it is.
 
 **Litmus test for "not magic":** can a developer (1) ⌘-click from the VO to the exact mapping, (2) read the
 *generated* bind/decode as plain Java, and (3) get a **compile error**, not a runtime surprise, when it's wrong?
@@ -279,45 +420,44 @@ enum; missing/ambiguous/type-mismatched `PgRepr` is a compile error; a non-parsi
 ## Addendum (2026-07-17) — what the released rc2 actually addressed
 
 Source-level audit of the published rc2 jars/sources (+ `v1.0.0-rc2` changelog). "Landed" = verified
-in the released sources; items marked *(not yet exercised here)* haven't been driven by this repo's
-build/tests yet.
+in the released sources. **The "adopted here" column supersedes the earlier "not yet exercised"
+notes** — the adoption pass happened the same day and is recorded in the paragraph below the table.
 
-| # | Item | rc2 status |
-|---|------|-----------|
-| 1 | Error→HTTP totality | **Landed** — `ErrorMappingValidator` (totality + dead-pattern/reference); unmapped `Cause` fails the build only under `[errors] strict = true`, warns by default *(not yet enabled here)* |
-| 2 | Pub-sub honesty | **Partial** — per-consumer-group `ErrorStrategy{RETRY,SKIP,STALL}` + `dead-letter` stream + `max-retries` in stream config; runtime dispatch not verifiable from published sources |
-| 3 | Auto-discover migrations | **Landed** — `SchemaLoader` globs `V*__*.sql` from the directory; `migrations.list` now advisory (warning on drift; manifest only needed for jar-packaged schemas) |
-| 4 | VO↔column mapping | **Landed** — `ValueMapping<T,P>` (absorbed the `PgRepr` proposal, #397): VO convention `static ValueMapping<Vo,P> valueMapping()`, drives row decode AND `:param` binding, plus HTTP path/query binding |
-| 5 | `aether verify` | **Can't tell** — no verify/validate surface found in the published cli pom; needs a runtime check |
-| 6 | `@HttpStatus` | Not landed — error→status still routes.toml pattern-globs |
-| 7 | Config scaffolding | Not landed — but typed `Topic<T>` (#396) removes much of the manual `resources.toml` topic wiring |
-| 8 | Text-block `@Query` | **Landed** — verified empirically in this repo (see §8 above) |
-| 9 | Forge bundles providers | Not landed — no forge submodule depends on `resource-http`/`resource-notification`; live E2E still blocked |
-| 10 | `@Scheduled`/`@Heartbeat` | **Partial** — `Scheduled` is real (zero-param `Promise<Unit>` methods, interval or cron, KV-tracked state; candidate to replace the operator-triggered `SweepHolds` endpoint). No `@Heartbeat` |
-| 11 | Shape-aware lint | **Partial** — JBCT-VO-01 now exempts `@Slice`/`@PgSql` framework shapes (this repo's `@SuppressWarnings("JBCT-VO-01")` may be removable); no test-tree awareness |
-| 12 | Canonical-name codegen | **Landed** — both PR #364 fixes confirmed in released sources |
-| 13 | Clear errors | **All three landed** — multi-param slice methods now auto-generate a wrapper `<Method>Request` (no more crash); >15 deps auto-batch (`BatchedAll`, fail-fast preserved — the cap is gone); data-modifying CTEs now a clear located compile error |
-| 14 | Typed topics | **Landed** — `Topic<T>` in slice-api (envelope 1005→1006) |
+| # | Item | rc2 status | Adopted here |
+|---|------|-----------|--------------|
+| 1 | Error→HTTP totality | **Landed** — `ErrorMappingValidator` (totality + dead-pattern/reference); unmapped `Cause` fails the build only under `[errors] strict = true`, warns by default | **Yes** — `strict = true` in all 19 routed slices |
+| 2 | Pub-sub honesty | **Partial** — per-consumer-group `ErrorStrategy{RETRY,SKIP,STALL}` + `dead-letter` stream + `max-retries` in stream config; runtime dispatch not verifiable from published sources | No — declarative stream consumers evaluated and deferred (see rc3 addendum) |
+| 3 | Auto-discover migrations | **Landed** — `SchemaLoader` globs `V*__*.sql` from the directory; `migrations.list` now advisory | **Yes** — manifest deleted, build green without it |
+| 4 | VO↔column mapping | **Landed** — `ValueMapping<T,P>` (absorbed the `PgRepr` proposal, #397): VO convention `static ValueMapping<Vo,P> valueMapping()`, drives row decode AND `:param` binding, plus HTTP path/query binding | **Yes** — `SeatState`/`PriceTier` at store boundaries |
+| 5 | `aether verify` | **Can't tell** — no verify/validate surface found in the published cli pom | n/a |
+| 6 | `@HttpStatus` | Not landed — error→status still routes.toml pattern-globs | n/a |
+| 7 | Config scaffolding | Not landed — but typed `Topic<T>` (#396) removes much of the manual `resources.toml` topic wiring | Partly — topics typed, sections still required |
+| 8 | Text-block `@Query` | **Landed** — verified empirically in this repo | **Yes** — used throughout |
+| 9 | Forge bundles providers | Not landed — no forge submodule depends on `resource-http`/`resource-notification`; live E2E still blocked | n/a |
+| 10 | `@Scheduled`/`@Heartbeat` | **Partial** — `Scheduled` is real (zero-param `Promise<Unit>` methods, interval or cron, KV-tracked state). No `@Heartbeat` | **Yes** — `SweepHolds.sweep()` on a 60s schedule; operator route kept |
+| 11 | Shape-aware lint | **Partial** — JBCT-VO-01 now exempts `@Slice`/`@PgSql` framework shapes; no test-tree awareness | **Yes** — the VO-01 bulk (53) is gone; 33 sites / 53 tokens remain (24 ORD-01, 20 SEQ-01, 6 UC-02, 3 VO-01) |
+| 12 | Canonical-name codegen | **Landed** — both PR #364 fixes confirmed in released sources | Yes — **but a third codegen bug surfaced on rc3** (#15) |
+| 13 | Clear errors | **Two of three landed** — multi-param slice methods auto-generate a wrapper `<Method>Request` (no more crash); data-modifying CTEs now a clear located compile error. **The 15-dep cap is NOT gone:** `BatchedAll` lives in the slice-processor's *generator* and chunks a generated factory's dependency list; core's `Promise.all` still tops out at `Mapper15`, so hand-written code is unchanged | n/a |
+| 14 | Typed topics | **Landed** — `Topic<T>` in slice-api (envelope 1005→1006) | **Yes** — `Topic.of(...)` constants on each fact record |
 
 Also new in rc2, not on the list: `RateGuard` (injectable backpressure resource +
 `ResourceCapacityExhausted`), aspect-level observability config surface, `DeferredSliceInvokerFacade`,
 stream `TierAwareRetention`, header-mode API versioning (#198), `produces`/`consumes` media types (#339).
+**The idempotency/dedup subscriber resource requested in #14 also shipped** —
+`IdempotencyInterceptorFactory` / `IdempotencyMethodInterceptor` / `IdempotencyConfig` are in
+`resource-interceptors`. Not adopted here: the projections are already monotonic by version guard
+(§5 of `DESIGN.md`), so deduplication would be redundant.
 
 **Adoption findings (this repo, 2026-07-17):** (a) `@ResourceQualifier` is `@Target(ANNOTATION_TYPE)`
 only — a `Scheduled` method needs a custom qualifier annotation (we added `@SweepSchedule`), same
 pattern as the subscription qualifiers. (b) Typed `Topic<T>` constants resolve fine in the
 slice-processor, but `jbct-maven-plugin generate-blueprint` still validates one `resources.toml`
 section per *resolved* topic name — the kebab-case sections must stay alongside the constants.
-Wish: teach blueprint validation the typed form so the redundant sections can go. (c) Adopted here:
-`[errors] strict = true` (18 slices, zero unmapped causes), migration auto-discovery
-(`migrations.list` deleted), 56 redundant VO-01 suppressions dropped, typed `Topic<T>` constants,
-`Scheduled` sweep (`[scheduling.sweep-holds]`, 60s), and `ValueMapping` for `SeatState`/`PriceTier`
-at store boundaries (rows decode VOs via `RowDecodeError.guard(... .lift())` — corrupt column values
-now fail typed at the row boundary).
+Wish: teach blueprint validation the typed form so the redundant sections can go.
 
 ---
 
-## Addendum (2026-07-17) — rc2 release completeness
+## Addendum — release completeness (rc2, and where rc3 stands)
 
 `1.0.0-rc2` reached Maven Central on 2026-07-16, but the **`aether/resource` subtree was not
 published — deliberately**: `aether/resource/pom.xml` at `v1.0.0-rc2` sets
@@ -325,12 +465,22 @@ published — deliberately**: `aether/resource/pom.xml` at `v1.0.0-rc2` sets
 resource modules. Result: `resource-api` and `resource-notification` 404, and no published rc2 jar
 contains `org.pragmatica.aether.resource.*` (`@PgSql`, `@Http`/`HttpClient`,
 `@Notify`/`NotificationSender`) — yet every slice project needs them as `provided` compile deps, so
-nothing that touches persistence, HTTP, or notifications builds from Central alone. Wish: publish
-the resource modules (drop the skip), or ship the resource *annotations/API* in an artifact that is
-published.
+nothing that touches persistence, HTTP, or notifications builds from Central alone.
+
+**On rc3 this got wider, then moot.** Adopting interceptors added a **third** unpublished
+dependency, `resource-interceptors`, from the same skipped subtree. And `1.0.0-rc3` is **not on
+Maven Central at all** — Central's newest published line is still rc2, so this project now builds
+entirely against a local `mvn install` of `release-1.0.0-rc3`. Verified mechanically: every rc3
+artifact in `~/.m2` carries no repository marker, while e.g. `slice-api:1.0.0-rc2` carries
+`central=`.
+
+**Wish (unchanged, now with a third artifact behind it):** publish the resource modules — drop the
+skip — or ship the resource *annotations/API* in an artifact that is published. As it stands, no
+third party can build any non-trivial slice project from Central, on any rc line.
 
 ---
 
-*Built from the ticketing posterchild, 2026-06. Each item has a live reproduction in this repo; ask for the
-exact files/symptoms per item. The two I'd file first: #1 (error→HTTP totality) and #2 (pub-sub honesty) —
-both small, high-leverage, and silently wrong today.*
+*Built from the ticketing posterchild; items 1–14 from the 2026-06 build, items 15–17 from the rc3
+interceptor adoption. Each item has a live reproduction in this repo; ask for the exact
+files/symptoms per item. The three I'd file first: **#15** (hyphen codegen bug — build-breaking and
+a one-line fix), **#1** (error→HTTP totality) and **#2** (pub-sub honesty).*

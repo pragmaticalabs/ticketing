@@ -9,7 +9,7 @@ runtime**.
 > `jbct-reviewer` agents. Aether slice patterns are owned by the `aether-coder` skill. This file is
 > for **project-specific facts and the glue between those sources** — it does not re-teach JBCT or Aether.
 
-The `src/` tree now **is** the product: the **23 single-use-case slices** of the PFD telescope in
+The `src/` tree now **is** the product: the **24 single-use-case slices** of the PFD telescope in
 `org.pragmatica.example.ticketing` (subsystems `booking`, `pricing`, `eventmanagement`,
 `availability`, `quote`). The HelloWorld scaffold has been removed.
 
@@ -61,7 +61,8 @@ subsystems **`booking`** (reserve→authorize→confirm, strict consistency, **B
 (price-history + projections), and **`event-management`** run as **Aether slices on the unified
 runtime**, with the **read path (availability/quote) split out and scaled on its own profile**.
 Booking on a contended seat is **design-out**: idempotent hold serializes access, losing attempts
-fast-fail with `SeatUnavailable`. Read that section before designing booking/pricing/availability.
+fast-fail as seat-unavailable (`StateConflict.SEAT_UNAVAILABLE` → 409). Read that section before
+designing booking/pricing/availability.
 
 ---
 
@@ -82,9 +83,13 @@ is the canonical shape:
 - **`@Codec` is never written** — the slice processor generates serialization codecs automatically.
 
 **Routing** (`src/main/resources/<pkg>/routes.toml`): maps HTTP → slice methods. Has `prefix`,
-`[routes]` (one per public method), and `[errors]` mapping `Cause` types → HTTP status (`default`
-required, typically 500; patterns like `HTTP_422 = ["*Invalid*"]`). Every public method needs a
-route; every error type needs a status.
+`[routes]` (one per public method), a **`[security]`** block (`default = "public" | "authenticated" |
+"role:<name>"`), and `[errors]` mapping `Cause` types → HTTP status (`default` required, typically
+500; patterns like `HTTP_422 = ["*Invalid*"]`). Every public method needs a route; every error type
+needs a status. This project sets **`strict = true`** in every `[errors]` block, so an unmapped
+`Cause` fails the build. **Error patterns glob over *simple names* and the generated router only
+matches causes from the slice's own package** — a shared value-object failure must be restated as a
+slice-local cause or it falls through to the 500 default.
 
 **Slice config** (`src/main/resources/slices/<Name>.toml`): `[blueprint] instances = N`.
 
@@ -193,17 +198,23 @@ jbct check src/main/java     # format + 41 lint rules (also: jbct format / jbct 
 ```
 
 - **Toolchain:** Java 25, Maven 3.9+. Pragmatica Lite / Aether / jbct artifacts are pinned to
-  **`1.0.0-rc2`** (the three `*.version` properties in `pom.xml`). **rc2 was published to Maven
-  Central on 2026-07-16** — including the official `slice-processor:1.0.0-rc2` with both codegen
-  fixes (route-import collision + codec FQN, PR pragmaticalabs/pragmatica#364), so the previously
-  hand-patched local jar is retired. **Exception: `resource-api` and `resource-notification` did NOT
-  make the release** — they must be locally installed from a `release-1.0.0-rc2` checkout
-  (`mvn install` under `aether/resource`) or the project won't resolve. The `jbct` CLI at `~/.jbct`
-  is **1.0.0-rc2** (upgraded 2026-07-17 from the Central `jbct-cli` dist; rc1 kept as
-  `jbct.jar.bak-2026-07-17` — note `jbct upgrade` checks a stale registry and can't self-update).
+  **`1.0.0-rc3`** (the three `*.version` properties in `pom.xml`). **rc3 is NOT on Maven Central** —
+  it is a **local build of the `release-1.0.0-rc3` branch** of the pragmatica repo, so *every* rc3
+  artifact in `~/.m2` got there via `mvn install`. Central's newest published line is still rc2.
+  **Three of this project's dependencies have never been published on any rc line** and stay
+  local-install-only even once rc3 ships: **`resource-api`, `resource-notification`, and
+  `resource-interceptors`** (`mvn install` under `aether/resource`) — without them the project won't
+  resolve. The `jbct` CLI at `~/.jbct` is **1.0.0-rc3** (upgraded 2026-07-30; rc2 kept as
+  `jbct.jar.bak-rc2-2026-07-30` — note `jbct upgrade` checks a stale registry and can't self-update).
+- **Formatting covers `src/main/java` only.** The `jbct-maven-plugin` `format` goal binds to
+  `process-sources`, which does not include test sources — **`src/test/java` is never auto-formatted
+  by a build.** Run `jbct format src/test/java` explicitly. The CLI and the Maven plugin are the same
+  rc3 engine and emit byte-identical output.
 - **basePackage:** `org.pragmatica.example.ticketing` (`jbct.toml`); line length 120, indent 4.
 - **Delegate Maven/test runs to the `build-runner` agent** — keep verbose output out of main context.
   Never run inline `mvn`/`jbct` for anything beyond a one-line status check.
+- **`jbct migrate`** bumps this project's dependency versions — use it for the next version bump
+  instead of hand-editing the three `*.version` properties in `pom.xml`.
 - Smoke test a running slice with `curl http://localhost:8070/api/...`; load-test with k6
   (`aether-coder` `deployment/k6-testing.md`).
 
@@ -251,8 +262,9 @@ AETHER CONTEXT (you have no built-in Aether knowledge — follow exactly):
   session resolves to these current globals.) Structural patterns are stable; for the freshest
   methodology and exact API signatures the **`../coding-technology/book/`** + **`/jbct` skill**
   (Core `1.0.0-rc1`) + real `org.pragmatica.lang.*` types are authoritative.
-- **Maven artifacts:** project pins **`1.0.0-rc2`** (the three `*.version` properties in `pom.xml`;
-  on Maven Central since 2026-07-16 except `resource-api`/`resource-notification` — see §7).
+- **Maven artifacts:** project pins **`1.0.0-rc3`** (the three `*.version` properties in `pom.xml`) —
+  **not on Maven Central; built locally from `release-1.0.0-rc3`**, and `resource-api` /
+  `resource-notification` / `resource-interceptors` were never published on any rc line. See §7.
 
 ---
 
@@ -266,12 +278,15 @@ AETHER CONTEXT (you have no built-in Aether knowledge — follow exactly):
   against the design. No placeholder `Option.empty()`, `TODO`, "not implemented", or "simplified for
   now" left in the path.
 - **Test naming:** `method_scenario_expectation()` (e.g. `greet_validName_returnsGreeting`,
-  `bookSeat_seatHeld_returnsSeatUnavailable`).
+  `execute_seatAlreadyHeld_returnsSeatUnavailable` — a real test in `AcquireHoldTest`; every slice
+  method is `execute`, so the method segment is almost always `execute`).
 - **Validation checkpoint before calling a slice complete:** @Slice + factory + `Promise<T>` returns;
-  routes.toml has every method + every error mapped + a `default`; every resource qualifier has a
-  matching `aether.toml` section; migrations exist with sequential `V0NN__` names; unit tests cover
-  validation + happy path + each failure; `jbct check` passes. (Full list: `aether-coder` SKILL.md
-  "Self-Validation Checkpoint".)
+  routes.toml has every method + a `[security]` default + every error mapped + an `[errors]` default
+  (with `strict = true`); shared-VO failures restated as slice-local causes so they map to 400/422
+  rather than 500; every resource qualifier has a matching `resources.toml` section; migrations exist
+  with sequential `V0NN__` names; unit tests cover validation + happy path + each failure;
+  `jbct check` passes — and `jbct format src/test/java` was run, since the build does not format
+  tests. (Full list: `aether-coder` SKILL.md "Self-Validation Checkpoint".)
 
 ---
 
@@ -286,31 +301,58 @@ AETHER CONTEXT (you have no built-in Aether knowledge — follow exactly):
 - Never hand-write codecs or SQL row mappers; never throw business exceptions; resources inject via
   the factory's parameters.
 - `jbct-coder` must be briefed on Aether every time (§8).
-- **rc1→rc2 slice-toolchain gotchas (hard-won — `docs/DESIGN.md` §8–§10 has the full list; rc2
-  statuses below are source-verified against the released jars, marked ⧗ where this repo hasn't
-  exercised the change yet):** `migrations.list` — rc2 auto-discovers `V*__*.sql` from the schema
-  dir, manifest now advisory ⧗ (we still ship one; harmless); `@Query` accepts **text blocks**
-  (rc1 mis-emit fixed; this repo uses them) but data-modifying CTEs stay unsupported — now a clear
-  compile error instead of silent mis-validation; **one-parameter slice methods** — rc2 auto-wraps
-  multi-param methods in a generated `<Method>Request` ⧗, but one request record stays the JBCT
-  idiom; the **15-transitive-dep `Promise.all` cap is gone** (rc2 auto-batches, fail-fast preserved) ⧗
-  — the one-slice-per-use-case split + pub-sub facts (`SeatSold`/`SeatReleased`/`PriceChanged`)
-  remain by design, not by cap; `@Notify` still needs the separate
-  `org.pragmatica-lite.aether:resource-notification` provided dep (NOT published to Central — see
-  Toolchain); still no `@Heartbeat`, but rc2 ships a real `Scheduled` (zero-param `Promise<Unit>`,
-  interval/cron, KV-tracked) ⧗ — candidate for `SweepHolds`; a `resources.toml` must still declare
-  every `@ResourceQualifier` config section (typed `Topic<T>` reduces the topic part). New rc2
-  opt-in worth enabling: `[errors] strict = true` makes unmapped `Cause`→HTTP a build failure ⧗.
-  Both slice-processor codegen bugs (route-import collision + codec FQN, PR #364) are fixed in the
-  released rc2.
+- **Slice-toolchain gotchas on rc3 (hard-won — `docs/DESIGN.md` §8–§10 has the full list; every
+  status below is verified against this repo's code, not inferred from a changelog):**
+  `migrations.list` — auto-discovery of `V*__*.sql` works, **the manifest is deleted; this repo
+  ships none**; `@Query` accepts **text blocks** (used throughout) but data-modifying CTEs stay
+  unsupported — now a clear compile error instead of silent mis-validation; **one-parameter slice
+  methods** — the processor auto-wraps multi-param methods in a generated `<Method>Request`, but one
+  request record stays the JBCT idiom; the **`Promise.all` 15-arity cap is NOT gone** — core's
+  largest overload is still `all(...)` → `Mapper15`; what changed is that the slice-processor's
+  `BatchedAll` batches a *generated* factory's transitive deps beyond 15, so the cap no longer
+  constrains slice wiring but does still constrain hand-written code; `@Notify` and the interceptor
+  factories need the separate `resource-notification` / `resource-interceptors` provided deps (never
+  published to Central — see Toolchain); still no `@Heartbeat`, but `Scheduled` is real and
+  **adopted** — `SweepHolds` has a zero-param `sweep()` behind a custom `@SweepSchedule` qualifier
+  (`@ResourceQualifier` is `@Target(ANNOTATION_TYPE)` only, so a meta-annotation is mandatory), with
+  the operator HTTP route kept alongside; a `resources.toml` must still declare every
+  `@ResourceQualifier` config section, typed `Topic<T>` notwithstanding; `[errors] strict = true` is
+  **enabled in all 19 routed slices**, so an unmapped `Cause` is a build failure.
+- **THIRD codegen bug, open on rc3 — hyphens in an interceptor config.** An interceptor
+  `@ResourceQualifier(config = "...")` whose value contains a **hyphen** generates an illegal Java
+  identifier (the generator translates `.` → `_` but leaves `-` alone) and the emitted code does not
+  compile. **Workaround in force: every interceptor config section uses underscores**
+  (`cache.availability.seat_status`, `log.quote.project_price`). Hyphens are still fine elsewhere —
+  `[scheduling.sweep-holds]` and the kebab-case topic sections compile normally. This is the third
+  codegen bug this project has found in the rc series; the first two (route-import collision +
+  codec FQN) were fixed upstream in `slice-processor:1.0.0-rc2` via PR pragmaticalabs/pragmatica#364.
+- **Fixed-message causes are enum constants, not empty records — one enum per HTTP status per slice.**
+  A failure carrying no data is a constant on a status-named enum (`StateConflict.SEAT_UNAVAILABLE`,
+  `ServiceUnavailable.BOOKING_STORE`, `EntityMissing.EVENT`, `AccessRefused.NOT_OWNER`,
+  `PaymentRefused.DECLINED`, `Unprocessable.CUSTOMER_INELIGIBLE`, `LifecycleConflict.EVENT_ALREADY_OPEN`,
+  `FieldRejected.BLANK_VENUE`), so a single glob maps the whole group (`HTTP_409 = ["*StateConflict*"]`).
+  The enum name states the *routing class* — never add a constant whose status differs from the group's.
+  Failures that carry data stay records: `InvalidRequest(field, detail)`, `UnacceptableValue(field,
+  detail)`, `TransitionRaced(status)`, `MalformedOnSaleAt(raw)`, and — in the convergence consumers
+  only — `SeatNotFound(seat)` / `SeatNotConvergible(seat, state)`. The store-unavailable constant is
+  subsystem-specific: `BOOKING_STORE`, `EVENT_MANAGEMENT_STORE`, `PRICING_STORE`, `AVAILABILITY_STORE`,
+  `QUOTE_STORE`.
+- **`@SuppressWarnings("JBCT-ORD-01")` on every slice impl record is expected — do not "fix" it.** The
+  impl record lives inside its own static factory, so ORD-01's ranking (record 0 before factory 3) can
+  never be satisfied without abandoning the slice shape §3 mandates. All 24 slices suppress it.
+  `src/main/java` carries 33 suppression sites / 53 rule tokens (24 `JBCT-ORD-01`, 20 `JBCT-SEQ-01`,
+  6 `JBCT-UC-02`, 3 `JBCT-VO-01`); see `docs/DESIGN.md` §7 and `AETHER-WISHLIST.md` #18.
 - The real product lives in `org.pragmatica.example.ticketing`, structured as the **PFD telescope**
-  (system→subsystem→workflow→use case as packages): **23 single-use-case slices** (subsystems booking,
+  (system→subsystem→workflow→use case as packages): **24 single-use-case slices** (subsystems booking,
   pricing, eventmanagement, availability, quote), each one nested `Request`/`Response` + an
-  `execute(Request)` method. The **write** subsystems (booking, pricing, eventmanagement) each share
+  `execute(Request)` method; **19 are HTTP-routed**, the 5 fact consumers carry no route. The
+  **write** subsystems (booking, pricing, eventmanagement) each share
   one per-subsystem `@PgSql` store; the **read** subsystems (availability, quote) use **per-use-case
   `@PgSql` interfaces** co-located with each slice (interface segregation — no read slice needs more
-  than one method). The HelloWorld scaffold is gone.
-  **Two** slice-processor codegen bugs were found+fixed (route-import collision +
-  codec-FQN shadowing of injected-slice `Request`/`Response`); both fixes shipped in the released
-  `slice-processor:1.0.0-rc2` on Maven Central (PR pragmaticalabs/pragmatica#364) — see
-  `docs/DESIGN.md` §8.
+  than one method). The HelloWorld scaffold is gone. Current counts: 65 main + 37 test Java files,
+  **214 tests**, 19 `routes.toml`, 24 slice configs, 9 migrations (`V001`–`V009`).
+- **`SeatSellability` (eventmanagement/capacity)** is the seam between booking and the `seats` table:
+  the `seats` table is owned by event-management, so `AcquireHold` and `BuyTicket` inject this slice
+  rather than reading `seats` directly. It answers "may this seat be sold?" — `BLOCKED`/`WITHDRAWN`
+  → no, `AVAILABLE`/`SOLD` → yes (a sold seat is refused by the claim statement, not by this gate).
+  Before it existed, `BlockSeat` was inert: blocking a seat did not stop holds or purchases.
