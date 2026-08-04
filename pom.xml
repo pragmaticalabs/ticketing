@@ -16,9 +16,9 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.release>25</maven.compiler.release>
-        <pragmatica-lite.version>1.0.0-rc2</pragmatica-lite.version>
-        <aether.version>1.0.0-rc2</aether.version>
-        <jbct.version>1.0.0-rc2</jbct.version>
+        <pragmatica-lite.version>1.0.0-rc3</pragmatica-lite.version>
+        <aether.version>1.0.0-rc3</aether.version>
+        <jbct.version>1.0.0-rc3</jbct.version>
     </properties>
 
     <dependencies>
@@ -81,6 +81,18 @@
         <dependency>
             <groupId>org.pragmatica-lite.aether</groupId>
             <artifactId>resource-notification</artifactId>
+            <version>${aether.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Method interceptors (cache, logging, retry, circuit breaker) referenced by
+             @ResourceQualifier(type = ...MethodInterceptor.class). A qualifier needs the interceptor
+             class at COMPILE time, so this cannot be runtime-only.
+             NOTE: like resource-api and resource-notification, this artifact is NOT published to
+             Maven Central; it must be installed to ~/.m2 from a source checkout. See README. -->
+        <dependency>
+            <groupId>org.pragmatica-lite.aether</groupId>
+            <artifactId>resource-interceptors</artifactId>
             <version>${aether.version}</version>
             <scope>provided</scope>
         </dependency>
