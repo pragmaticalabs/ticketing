@@ -51,7 +51,41 @@ public interface AddSeat {
         }
     }
 
+    Promise<Response> execute(Request request);
+
     sealed interface AddSeatError extends Cause {
+        /// Fixed-message reads that found nothing. Every constant here is an HTTP 404 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 404 must not be added to it, and one
+        /// `*EntityMissing*` pattern maps the whole enum.
+        enum EntityMissing implements AddSeatError {
+            EVENT("Event not found");
+            private final String message;
+            EntityMissing(String message) {
+                this.message = message;
+            }
+            @Override
+            public String message() {
+                return message;
+            }
+        }
+
+        /// Fixed-message failures of a dependency this slice calls. Every constant here is an HTTP 503 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 503 must not be added to it, and one
+        /// `*ServiceUnavailable*` pattern maps the whole enum.
+        enum ServiceUnavailable implements AddSeatError {
+            EVENT_MANAGEMENT_STORE("Event management store is unavailable");
+            private final String message;
+            ServiceUnavailable(String message) {
+                this.message = message;
+            }
+            @Override
+            public String message() {
+                return message;
+            }
+        }
+
         /// Fixed-message refusals by the event-status gate. Every constant here is a conflict on the
         /// event's current status and therefore HTTP 409, which is why the group is named for the routing
         /// rule rather than called `General`: a cause that is *not* a 409 must not be added to it, and
@@ -65,20 +99,6 @@ public interface AddSeat {
             @Override
             public String message() {
                 return message;
-            }
-        }
-
-        record EventNotFound() implements AddSeatError {
-            @Override
-            public String message() {
-                return "Event not found";
-            }
-        }
-
-        record StoreUnavailable() implements AddSeatError {
-            @Override
-            public String message() {
-                return "Event management store is unavailable";
             }
         }
 
@@ -108,11 +128,11 @@ public interface AddSeat {
         }
 
         static AddSeatError eventNotFound() {
-            return new EventNotFound();
+            return EntityMissing.EVENT;
         }
 
         static AddSeatError storeUnavailable() {
-            return new StoreUnavailable();
+            return ServiceUnavailable.EVENT_MANAGEMENT_STORE;
         }
 
         /// The event is cancelled -- a terminal status that can no longer grow capacity.
@@ -138,18 +158,18 @@ public interface AddSeat {
         /// well-formed `int` outside the admissible domain (422).
         private static AddSeatError locationFailure(Cause cause) {
             return switch (cause) {
-                case SeatLocation.Error.BlankSection _ -> new InvalidRequest("section", cause.message());
-                case SeatLocation.Error.BlankRow _ -> new InvalidRequest("row", cause.message());
-                case SeatLocation.Error.NonPositiveNumber _ -> new UnacceptableValue("number", cause.message());
+                case SeatLocation.Error.Invalid.BLANK_SECTION -> new InvalidRequest("section", cause.message());
+                case SeatLocation.Error.Invalid.BLANK_ROW -> new InvalidRequest("row", cause.message());
+                case SeatLocation.Error.Unacceptable.NON_POSITIVE_NUMBER -> new UnacceptableValue("number",
+                                                                                                  cause.message());
                 default -> new InvalidRequest("location", cause.message());
             };
         }
     }
 
-    Promise<Response> execute(Request request);
-
     static AddSeat addSeat(@PgSql EventStore store) {
-        @SuppressWarnings("JBCT-SEQ-01")
+        // JBCT-ORD-01: the slice-implementation record lives inside its own factory, so it can never precede it.
+        @SuppressWarnings({"JBCT-SEQ-01", "JBCT-ORD-01"})
         record addSeat(EventStore store) implements AddSeat {
             // JBCT pattern: Sequencer -- validate -> gate on event status -> insert seat.
             @Override

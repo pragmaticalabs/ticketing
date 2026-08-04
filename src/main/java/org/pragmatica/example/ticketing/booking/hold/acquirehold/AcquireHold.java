@@ -67,30 +67,45 @@ public interface AcquireHold {
         }
     }
 
-    /// Closed set of acquire failures. Each is a distinct record so route error-mapping can target it
-    /// by simple name (see routes.toml).
+    Promise<Response> execute(Request request);
+
+    /// Closed set of acquire failures. Fixed-message refusals are grouped into one enum per HTTP status
+    /// so route error-mapping can target a whole status class by that enum's simple name (see
+    /// routes.toml); data-carrying refusals stay records.
     sealed interface AcquireError extends Cause {
-        record SeatUnavailable() implements AcquireError {
+        /// Fixed-message refusals by a guard on current state. Every constant here is an HTTP 409 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 409 must not be added to it, and one
+        /// `*StateConflict*` pattern maps the whole enum.
+        enum StateConflict implements AcquireError {
+            SEAT_UNAVAILABLE("Seat is no longer available"),
+            /// The operator has withheld this seat from sale (blocked or withdrawn), or event-management
+            /// could not answer. Distinct from [#SEAT_UNAVAILABLE], which means another customer holds or
+            /// owns the seat: this one is not resolved by waiting for a hold to lapse.
+            SEAT_NOT_SELLABLE("Seat is not available for sale");
+            private final String message;
+            StateConflict(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "Seat is no longer available";
+                return message;
             }
         }
 
-        record StoreUnavailable() implements AcquireError {
-            @Override
-            public String message() {
-                return "Booking store is unavailable";
+        /// Fixed-message failures of a dependency this slice calls. Every constant here is an HTTP 503 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 503 must not be added to it, and one
+        /// `*ServiceUnavailable*` pattern maps the whole enum.
+        enum ServiceUnavailable implements AcquireError {
+            BOOKING_STORE("Booking store is unavailable");
+            private final String message;
+            ServiceUnavailable(String message) {
+                this.message = message;
             }
-        }
-
-        /// The operator has withheld this seat from sale (blocked or withdrawn), or event-management
-        /// could not answer. Distinct from [SeatUnavailable], which means another customer holds or
-        /// owns the seat: this one is not resolved by waiting for a hold to lapse.
-        record SeatNotSellable() implements AcquireError {
             @Override
             public String message() {
-                return "Seat is not available for sale";
+                return message;
             }
         }
 
@@ -108,15 +123,15 @@ public interface AcquireHold {
         }
 
         static AcquireError seatUnavailable() {
-            return new SeatUnavailable();
+            return StateConflict.SEAT_UNAVAILABLE;
         }
 
         static AcquireError storeUnavailable() {
-            return new StoreUnavailable();
+            return ServiceUnavailable.BOOKING_STORE;
         }
 
         static AcquireError seatNotSellable() {
-            return new SeatNotSellable();
+            return StateConflict.SEAT_NOT_SELLABLE;
         }
 
         static AcquireError invalidCustomer(Cause cause) {
@@ -132,10 +147,9 @@ public interface AcquireHold {
         }
     }
 
-    Promise<Response> execute(Request request);
-
     static AcquireHold acquireHold(@PgSql BookingStore store, SeatSellability seatSellability) {
-        @SuppressWarnings("JBCT-SEQ-01")
+        // JBCT-ORD-01: the slice-implementation record lives inside its own factory, so it can never precede it.
+        @SuppressWarnings({"JBCT-SEQ-01", "JBCT-ORD-01"})
         record acquireHold(BookingStore store, SeatSellability seatSellability) implements AcquireHold {
             // JBCT pattern: Sequencer -- validate -> gate on authoritative seat state -> design-out
             // hold claim (state 'held' with a TTL).

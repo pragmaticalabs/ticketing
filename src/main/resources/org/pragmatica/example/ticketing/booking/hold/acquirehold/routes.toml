@@ -12,5 +12,5 @@ default = "authenticated"
 strict = true
 default = 500
 HTTP_400 = ["*InvalidRequest*"]
-HTTP_409 = ["*SeatUnavailable*", "*SeatNotSellable*"]
-HTTP_503 = ["*StoreUnavailable*"]
+HTTP_409 = ["*StateConflict*"]
+HTTP_503 = ["*ServiceUnavailable*"]

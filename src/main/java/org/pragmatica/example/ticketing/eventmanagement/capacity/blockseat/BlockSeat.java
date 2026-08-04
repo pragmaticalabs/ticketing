@@ -17,18 +17,38 @@ public interface BlockSeat {
 
     record Response(String seat) {}
 
+    Promise<Response> execute(Request request);
+
     sealed interface BlockSeatError extends Cause {
-        record SeatUnavailable() implements BlockSeatError {
+        /// Fixed-message refusals by a guard on current state. Every constant here is an HTTP 409 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 409 must not be added to it, and one
+        /// `*StateConflict*` pattern maps the whole enum.
+        enum StateConflict implements BlockSeatError {
+            SEAT_UNAVAILABLE("Seat is not available to block");
+            private final String message;
+            StateConflict(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "Seat is not available to block";
+                return message;
             }
         }
 
-        record StoreUnavailable() implements BlockSeatError {
+        /// Fixed-message failures of a dependency this slice calls. Every constant here is an HTTP 503 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 503 must not be added to it, and one
+        /// `*ServiceUnavailable*` pattern maps the whole enum.
+        enum ServiceUnavailable implements BlockSeatError {
+            EVENT_MANAGEMENT_STORE("Event management store is unavailable");
+            private final String message;
+            ServiceUnavailable(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "Event management store is unavailable";
+                return message;
             }
         }
 
@@ -46,11 +66,11 @@ public interface BlockSeat {
         }
 
         static BlockSeatError seatUnavailable() {
-            return new SeatUnavailable();
+            return StateConflict.SEAT_UNAVAILABLE;
         }
 
         static BlockSeatError storeUnavailable() {
-            return new StoreUnavailable();
+            return ServiceUnavailable.EVENT_MANAGEMENT_STORE;
         }
 
         static BlockSeatError invalidSeat(Cause cause) {
@@ -58,10 +78,9 @@ public interface BlockSeat {
         }
     }
 
-    Promise<Response> execute(Request request);
-
     static BlockSeat blockSeat(@PgSql EventStore store) {
-        @SuppressWarnings("JBCT-SEQ-01")
+        // JBCT-ORD-01: the slice-implementation record lives inside its own factory, so it can never precede it.
+        @SuppressWarnings({"JBCT-SEQ-01", "JBCT-ORD-01"})
         record blockSeat(EventStore store) implements BlockSeat {
             // JBCT pattern: Sequencer -- validate -> guarded block update.
             @Override

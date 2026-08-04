@@ -42,7 +42,7 @@ class AcquireHoldTest {
                                               UUID.randomUUID().toString()))
              .await()
              .onSuccess(_ -> fail("a blocked seat must not be holdable"))
-             .onFailure(cause -> assertThat(cause).isInstanceOf(AcquireHold.AcquireError.SeatNotSellable.class));
+             .onFailure(cause -> assertThat(cause).isEqualTo(AcquireHold.AcquireError.StateConflict.SEAT_NOT_SELLABLE));
     }
 
     @Test

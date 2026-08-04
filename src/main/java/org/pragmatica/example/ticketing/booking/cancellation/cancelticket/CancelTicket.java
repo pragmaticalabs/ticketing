@@ -157,41 +157,74 @@ public interface CancelTicket {
         }
     }
 
-    /// Closed set of cancel failures. Each is a distinct record so route error-mapping can target it
-    /// by simple name (see routes.toml).
+    Promise<Response> execute(Request request);
+
+    /// Closed set of cancel failures. Fixed-message refusals are grouped into one enum per HTTP status
+    /// so route error-mapping can target a whole status class by that enum's simple name (see
+    /// routes.toml); data-carrying refusals stay records.
     sealed interface CancelError extends Cause {
-        record BookingNotFound() implements CancelError {
+        /// Fixed-message reads that found nothing. Every constant here is an HTTP 404 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 404 must not be added to it, and one
+        /// `*EntityMissing*` pattern maps the whole enum.
+        enum EntityMissing implements CancelError {
+            BOOKING("Booking not found");
+            private final String message;
+            EntityMissing(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "Booking not found";
+                return message;
             }
         }
 
-        record NotOwner() implements CancelError {
+        /// Fixed-message refusals to act on another party's data. Every constant here is an HTTP 403 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 403 must not be added to it, and one
+        /// `*AccessRefused*` pattern maps the whole enum.
+        enum AccessRefused implements CancelError {
+            NOT_OWNER("Booking belongs to another customer");
+            private final String message;
+            AccessRefused(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "Booking belongs to another customer";
+                return message;
             }
         }
 
-        record AlreadyCancelled() implements CancelError {
+        /// Fixed-message refusals by a guard on current state. Every constant here is an HTTP 409 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 409 must not be added to it, and one
+        /// `*StateConflict*` pattern maps the whole enum.
+        enum StateConflict implements CancelError {
+            ALREADY_CANCELLED("Booking is already cancelled");
+            private final String message;
+            StateConflict(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "Booking is already cancelled";
+                return message;
             }
         }
 
-        record RefundFailed() implements CancelError {
-            @Override
-            public String message() {
-                return "Refund could not be completed";
+        /// Fixed-message failures of a dependency this slice calls. Every constant here is an HTTP 503 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 503 must not be added to it, and one
+        /// `*ServiceUnavailable*` pattern maps the whole enum.
+        enum ServiceUnavailable implements CancelError {
+            BOOKING_STORE("Booking store is unavailable"),
+            PAYMENT_GATEWAY("Refund could not be completed");
+            private final String message;
+            ServiceUnavailable(String message) {
+                this.message = message;
             }
-        }
-
-        record StoreUnavailable() implements CancelError {
             @Override
             public String message() {
-                return "Booking store is unavailable";
+                return message;
             }
         }
 
@@ -209,23 +242,23 @@ public interface CancelTicket {
         }
 
         static CancelError bookingNotFound() {
-            return new BookingNotFound();
+            return EntityMissing.BOOKING;
         }
 
         static CancelError notOwner() {
-            return new NotOwner();
+            return AccessRefused.NOT_OWNER;
         }
 
         static CancelError alreadyCancelled() {
-            return new AlreadyCancelled();
+            return StateConflict.ALREADY_CANCELLED;
         }
 
         static CancelError refundFailed() {
-            return new RefundFailed();
+            return ServiceUnavailable.PAYMENT_GATEWAY;
         }
 
         static CancelError storeUnavailable() {
-            return new StoreUnavailable();
+            return ServiceUnavailable.BOOKING_STORE;
         }
 
         static CancelError invalidBooking(Cause cause) {
@@ -237,12 +270,11 @@ public interface CancelTicket {
         }
     }
 
-    Promise<Response> execute(Request request);
-
     static CancelTicket cancelTicket(@PgSql BookingStore store,
                                      @Http HttpClient gateway,
                                      @SeatReleasedPublisher Publisher<SeatReleased> seatReleased) {
-        @SuppressWarnings("JBCT-SEQ-01")
+        // JBCT-ORD-01: the slice-implementation record lives inside its own factory, so it can never precede it.
+        @SuppressWarnings({"JBCT-SEQ-01", "JBCT-ORD-01"})
         record cancelTicket(BookingStore store, HttpClient gateway, Publisher<SeatReleased> seatReleased) implements CancelTicket {
             // JBCT pattern: Sequencer -- load -> ensure cancellable -> refund (idempotent) -> release
             // and close -> publish SeatReleased.

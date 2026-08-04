@@ -33,18 +33,38 @@ public interface QuotePrice {
         }
     }
 
+    Promise<Response> execute(Request request);
+
     sealed interface QuoteError extends Cause {
-        record PriceNotFound() implements QuoteError {
+        /// Fixed-message reads that found nothing. Every constant here is an HTTP 404 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 404 must not be added to it, and one
+        /// `*EntityMissing*` pattern maps the whole enum.
+        enum EntityMissing implements QuoteError {
+            PRICE("No price is available for this event and tier");
+            private final String message;
+            EntityMissing(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "No price is available for this event and tier";
+                return message;
             }
         }
 
-        record StoreUnavailable() implements QuoteError {
+        /// Fixed-message failures of a dependency this slice calls. Every constant here is an HTTP 503 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 503 must not be added to it, and one
+        /// `*ServiceUnavailable*` pattern maps the whole enum.
+        enum ServiceUnavailable implements QuoteError {
+            PRICING_STORE("Pricing store is unavailable");
+            private final String message;
+            ServiceUnavailable(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "Pricing store is unavailable";
+                return message;
             }
         }
 
@@ -63,8 +83,8 @@ public interface QuotePrice {
 
         /// Client-facing validation refusal (HTTP 422): a request field parsed cleanly but its value
         /// lies outside the field's admissible domain -- here, a well-formed token that names no member
-        /// of the closed `PriceTier` set. It is deliberately not the 404 that [PriceNotFound] earns: an
-        /// unknown tier is a malformed *question*, while `PriceNotFound` is a well-formed question with
+        /// of the closed `PriceTier` set. It is deliberately not the 404 that [EntityMissing#PRICE] earns: an
+        /// unknown tier is a malformed *question*, while [EntityMissing#PRICE] is a well-formed question with
         /// no answer, and conflating them would tell the caller a tier exists but is unpriced.
         record UnacceptableValue(String field, String detail) implements QuoteError {
             @Override
@@ -74,11 +94,11 @@ public interface QuotePrice {
         }
 
         static QuoteError priceNotFound() {
-            return new PriceNotFound();
+            return EntityMissing.PRICE;
         }
 
         static QuoteError storeUnavailable() {
-            return new StoreUnavailable();
+            return ServiceUnavailable.PRICING_STORE;
         }
 
         static QuoteError invalidEvent(Cause cause) {
@@ -90,10 +110,9 @@ public interface QuotePrice {
         }
     }
 
-    Promise<Response> execute(Request request);
-
     static QuotePrice quotePrice(@PgSql PricingStore store) {
-        @SuppressWarnings("JBCT-SEQ-01")
+        // JBCT-ORD-01: the slice-implementation record lives inside its own factory, so it can never precede it.
+        @SuppressWarnings({"JBCT-SEQ-01", "JBCT-ORD-01"})
         record quotePrice(PricingStore store) implements QuotePrice {
             @Override
             public Promise<Response> execute(Request request) {

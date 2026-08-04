@@ -17,18 +17,38 @@ public interface ReleaseSeat {
 
     record Response(String seat) {}
 
+    Promise<Response> execute(Request request);
+
     sealed interface ReleaseSeatError extends Cause {
-        record SeatNotBlocked() implements ReleaseSeatError {
+        /// Fixed-message refusals by a guard on current state. Every constant here is an HTTP 409 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 409 must not be added to it, and one
+        /// `*StateConflict*` pattern maps the whole enum.
+        enum StateConflict implements ReleaseSeatError {
+            SEAT_NOT_BLOCKED("Seat is not blocked");
+            private final String message;
+            StateConflict(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "Seat is not blocked";
+                return message;
             }
         }
 
-        record StoreUnavailable() implements ReleaseSeatError {
+        /// Fixed-message failures of a dependency this slice calls. Every constant here is an HTTP 503 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 503 must not be added to it, and one
+        /// `*ServiceUnavailable*` pattern maps the whole enum.
+        enum ServiceUnavailable implements ReleaseSeatError {
+            EVENT_MANAGEMENT_STORE("Event management store is unavailable");
+            private final String message;
+            ServiceUnavailable(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "Event management store is unavailable";
+                return message;
             }
         }
 
@@ -46,11 +66,11 @@ public interface ReleaseSeat {
         }
 
         static ReleaseSeatError seatNotBlocked() {
-            return new SeatNotBlocked();
+            return StateConflict.SEAT_NOT_BLOCKED;
         }
 
         static ReleaseSeatError storeUnavailable() {
-            return new StoreUnavailable();
+            return ServiceUnavailable.EVENT_MANAGEMENT_STORE;
         }
 
         static ReleaseSeatError invalidSeat(Cause cause) {
@@ -58,10 +78,9 @@ public interface ReleaseSeat {
         }
     }
 
-    Promise<Response> execute(Request request);
-
     static ReleaseSeat releaseSeat(@PgSql EventStore store) {
-        @SuppressWarnings("JBCT-SEQ-01")
+        // JBCT-ORD-01: the slice-implementation record lives inside its own factory, so it can never precede it.
+        @SuppressWarnings({"JBCT-SEQ-01", "JBCT-ORD-01"})
         record releaseSeat(EventStore store) implements ReleaseSeat {
             // JBCT pattern: Sequencer -- validate -> guarded release update.
             @Override

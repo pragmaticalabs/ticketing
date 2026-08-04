@@ -72,11 +72,22 @@ public interface SetPrice {
         }
     }
 
+    Promise<Response> execute(Request request);
+
     sealed interface PricingError extends Cause {
-        record StoreUnavailable() implements PricingError {
+        /// Fixed-message failures of a dependency this slice calls. Every constant here is an HTTP 503 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 503 must not be added to it, and one
+        /// `*ServiceUnavailable*` pattern maps the whole enum.
+        enum ServiceUnavailable implements PricingError {
+            PRICING_STORE("Pricing store is unavailable");
+            private final String message;
+            ServiceUnavailable(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "Pricing store is unavailable";
+                return message;
             }
         }
 
@@ -105,7 +116,7 @@ public interface SetPrice {
         }
 
         static PricingError storeUnavailable() {
-            return new StoreUnavailable();
+            return ServiceUnavailable.PRICING_STORE;
         }
 
         static PricingError invalidEvent(Cause cause) {
@@ -134,10 +145,9 @@ public interface SetPrice {
         }
     }
 
-    Promise<Response> execute(Request request);
-
     static SetPrice setPrice(@PgSql PricingStore store, @PriceChangedPublisher Publisher<PriceChanged> publisher) {
-        @SuppressWarnings("JBCT-SEQ-01")
+        // JBCT-ORD-01: the slice-implementation record lives inside its own factory, so it can never precede it.
+        @SuppressWarnings({"JBCT-SEQ-01", "JBCT-ORD-01"})
         record setPrice(PricingStore store, Publisher<PriceChanged> publisher) implements SetPrice {
             // JBCT pattern: Sequencer -- validate -> commit (append@version -> upsert -> publish).
             @Override

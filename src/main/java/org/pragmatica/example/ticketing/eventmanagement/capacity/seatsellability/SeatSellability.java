@@ -32,7 +32,7 @@ import org.pragmatica.example.ticketing.shared.SeatState;
 ///     window after every cancellation in which the seat is genuinely free but unsellable, and would
 ///     buy nothing -- the claim guard already refuses a seat with a confirmed reservation.
 ///
-/// An unknown seat is [SeatSellabilityError.SeatNotFound] rather than a `sellable = false` answer:
+/// An unknown seat is [SeatSellabilityError.EntityMissing#SEAT] rather than a `sellable = false` answer:
 /// event-management owns the seat catalogue, so "no such seat" is a different fact from "this seat is
 /// withheld", and each caller decides what to do with it.
 @Slice
@@ -41,20 +41,41 @@ public interface SeatSellability {
 
     record Response(String seat, String state, boolean sellable) {}
 
-    /// Closed set of sellability-read failures. Each is a distinct record so route error-mapping can
-    /// target it by simple name (see routes.toml).
+    Promise<Response> execute(Request request);
+
+    /// Closed set of sellability-read failures. Fixed-message refusals are grouped into one enum per HTTP
+    /// status so route error-mapping can target a whole status class by that enum's simple name (see
+    /// routes.toml); data-carrying refusals stay records.
     sealed interface SeatSellabilityError extends Cause {
-        record SeatNotFound() implements SeatSellabilityError {
+        /// Fixed-message reads that found nothing. Every constant here is an HTTP 404 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 404 must not be added to it, and one
+        /// `*EntityMissing*` pattern maps the whole enum.
+        enum EntityMissing implements SeatSellabilityError {
+            SEAT("Seat not found");
+            private final String message;
+            EntityMissing(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "Seat not found";
+                return message;
             }
         }
 
-        record StoreUnavailable() implements SeatSellabilityError {
+        /// Fixed-message failures of a dependency this slice calls. Every constant here is an HTTP 503 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 503 must not be added to it, and one
+        /// `*ServiceUnavailable*` pattern maps the whole enum.
+        enum ServiceUnavailable implements SeatSellabilityError {
+            EVENT_MANAGEMENT_STORE("Event management store is unavailable");
+            private final String message;
+            ServiceUnavailable(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "Event management store is unavailable";
+                return message;
             }
         }
 
@@ -72,11 +93,11 @@ public interface SeatSellability {
         }
 
         static SeatSellabilityError seatNotFound() {
-            return new SeatNotFound();
+            return EntityMissing.SEAT;
         }
 
         static SeatSellabilityError storeUnavailable() {
-            return new StoreUnavailable();
+            return ServiceUnavailable.EVENT_MANAGEMENT_STORE;
         }
 
         static SeatSellabilityError invalidSeat(Cause cause) {
@@ -84,10 +105,9 @@ public interface SeatSellability {
         }
     }
 
-    Promise<Response> execute(Request request);
-
     static SeatSellability seatSellability(@PgSql EventStore store) {
-        @SuppressWarnings("JBCT-SEQ-01")
+        // JBCT-ORD-01: the slice-implementation record lives inside its own factory, so it can never precede it.
+        @SuppressWarnings({"JBCT-SEQ-01", "JBCT-ORD-01"})
         record seatSellability(EventStore store) implements SeatSellability {
             // JBCT pattern: Sequencer -- validate -> read authoritative seat state.
             @Override

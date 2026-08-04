@@ -19,6 +19,10 @@ import org.pragmatica.example.ticketing.shared.event.SeatSoldSubscription;
 /// malformed fact or a transient store error is recovered to Unit so the subscription never wedges.
 /// Ordering is not this slice's job: it forwards the fact's per-seat `version` and the store's
 /// `WHERE seat_availability.version < EXCLUDED.version` guard discards anything already overtaken.
+///
+/// JBCT-UC-02: a fact consumer's input IS the published `SeatSold` fact -- that is the subscription
+/// contract, so there is no Request/Response pair to declare.
+@SuppressWarnings("JBCT-UC-02")
 @Slice
 public interface ProjectSeatSold {
     record ValidSeatRef(SeatId seat, EventId event, long version) {
@@ -36,6 +40,8 @@ public interface ProjectSeatSold {
     Promise<Unit> execute(SeatSold event);
 
     static ProjectSeatSold projectSeatSold(@PgSql SeatProjectionStore store) {
+        // JBCT-ORD-01: the slice-implementation record lives inside its own factory, so it can never precede it.
+        @SuppressWarnings("JBCT-ORD-01")
         record projectSeatSold(SeatProjectionStore store) implements ProjectSeatSold {
             // JBCT pattern: Sequencer -- parse fact -> upsert projection -> recover.
             @Override

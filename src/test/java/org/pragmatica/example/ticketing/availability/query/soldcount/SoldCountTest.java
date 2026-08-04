@@ -73,6 +73,6 @@ class SoldCountTest {
         failing.execute(new Request(UUID.randomUUID().toString()))
                .await()
                .onSuccess(r -> fail("Expected store failure"))
-               .onFailure(cause -> assertThat(cause).isInstanceOf(SoldCount.AvailabilityError.StoreUnavailable.class));
+               .onFailure(cause -> assertThat(cause).isEqualTo(SoldCount.AvailabilityError.ServiceUnavailable.AVAILABILITY_STORE));
     }
 }

@@ -87,18 +87,38 @@ public interface AdjustPrice {
         }
     }
 
+    Promise<Response> execute(Request request);
+
     sealed interface AdjustError extends Cause {
-        record PriceNotFound() implements AdjustError {
+        /// Fixed-message reads that found nothing. Every constant here is an HTTP 404 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 404 must not be added to it, and one
+        /// `*EntityMissing*` pattern maps the whole enum.
+        enum EntityMissing implements AdjustError {
+            PRICE("No price is available for this event and tier");
+            private final String message;
+            EntityMissing(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "No price is available for this event and tier";
+                return message;
             }
         }
 
-        record StoreUnavailable() implements AdjustError {
+        /// Fixed-message failures of a dependency this slice calls. Every constant here is an HTTP 503 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 503 must not be added to it, and one
+        /// `*ServiceUnavailable*` pattern maps the whole enum.
+        enum ServiceUnavailable implements AdjustError {
+            PRICING_STORE("Pricing store is unavailable");
+            private final String message;
+            ServiceUnavailable(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "Pricing store is unavailable";
+                return message;
             }
         }
 
@@ -128,11 +148,11 @@ public interface AdjustPrice {
         }
 
         static AdjustError priceNotFound() {
-            return new PriceNotFound();
+            return EntityMissing.PRICE;
         }
 
         static AdjustError storeUnavailable() {
-            return new StoreUnavailable();
+            return ServiceUnavailable.PRICING_STORE;
         }
 
         static AdjustError invalidEvent(Cause cause) {
@@ -148,11 +168,10 @@ public interface AdjustPrice {
         }
     }
 
-    Promise<Response> execute(Request request);
-
     static AdjustPrice adjustPrice(@PgSql PricingStore store,
                                    @PriceChangedPublisher Publisher<PriceChanged> publisher) {
-        @SuppressWarnings("JBCT-SEQ-01")
+        // JBCT-ORD-01: the slice-implementation record lives inside its own factory, so it can never precede it.
+        @SuppressWarnings({"JBCT-SEQ-01", "JBCT-ORD-01"})
         record adjustPrice(PricingStore store, Publisher<PriceChanged> publisher) implements AdjustPrice {
             // JBCT pattern: Sequencer -- validate -> read current -> scale -> commit.
             @Override

@@ -82,7 +82,7 @@ class QuoteForCustomerTest {
                                     "STANDARD"))
                .await()
                .onSuccess(r -> fail("Expected store failure"))
-               .onFailure(cause -> assertThat(cause).isInstanceOf(QuoteForCustomer.QuoteError.StoreUnavailable.class));
+               .onFailure(cause -> assertThat(cause).isEqualTo(QuoteForCustomer.QuoteError.ServiceUnavailable.QUOTE_STORE));
     }
 
     /// See BuyTicketTest for why this contract exists.

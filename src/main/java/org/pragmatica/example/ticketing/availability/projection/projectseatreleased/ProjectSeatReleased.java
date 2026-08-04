@@ -20,6 +20,10 @@ import org.pragmatica.example.ticketing.shared.event.SeatReleasedSubscription;
 /// Ordering is not this slice's job: it forwards the fact's per-seat `version` and the store's
 /// `WHERE seat_availability.version < EXCLUDED.version` guard discards a release that was overtaken
 /// by a later sale of the same seat.
+///
+/// JBCT-UC-02: a fact consumer's input IS the published `SeatReleased` fact -- that is the subscription
+/// contract, so there is no Request/Response pair to declare.
+@SuppressWarnings("JBCT-UC-02")
 @Slice
 public interface ProjectSeatReleased {
     record ValidSeatRef(SeatId seat, EventId event, long version) {
@@ -37,6 +41,8 @@ public interface ProjectSeatReleased {
     Promise<Unit> execute(SeatReleased event);
 
     static ProjectSeatReleased projectSeatReleased(@PgSql SeatProjectionStore store) {
+        // JBCT-ORD-01: the slice-implementation record lives inside its own factory, so it can never precede it.
+        @SuppressWarnings("JBCT-ORD-01")
         record projectSeatReleased(SeatProjectionStore store) implements ProjectSeatReleased {
             // JBCT pattern: Sequencer -- parse fact -> upsert projection -> recover.
             @Override

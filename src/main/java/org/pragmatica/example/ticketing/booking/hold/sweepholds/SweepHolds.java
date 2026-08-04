@@ -32,26 +32,15 @@ import org.pragmatica.example.ticketing.shared.event.SeatReleasedPublisher;
 /// `sweep()` runs on the runtime scheduler (rc2 `Scheduled`, cadence in `[scheduling.sweep-holds]`
 /// in resources.toml); the HTTP endpoint on `execute` remains as an operator escape hatch. The empty
 /// `Request` record keeps the one-parameter slice-method contract.
+///
+/// JBCT-UC-02: the second entry method is `sweep()`, the zero-parameter `Promise<Unit>` entry the `Scheduled`
+/// contract requires; it is excluded from route generation and `execute` remains the only Zone-1 entry.
+@SuppressWarnings("JBCT-UC-02")
 @Slice
 public interface SweepHolds {
     record Request() {}
 
     record Response(long released) {}
-
-    /// Closed set of sweep failures. Each is a distinct record so route error-mapping can target it
-    /// by simple name (see routes.toml).
-    sealed interface SweepError extends Cause {
-        record StoreUnavailable() implements SweepError {
-            @Override
-            public String message() {
-                return "Booking store is unavailable";
-            }
-        }
-
-        static SweepError storeUnavailable() {
-            return new StoreUnavailable();
-        }
-    }
 
     Promise<Response> execute(Request request);
 
@@ -60,9 +49,35 @@ public interface SweepHolds {
     @SweepSchedule
     Promise<Unit> sweep();
 
+    /// Closed set of sweep failures. Fixed-message refusals are grouped into one enum per HTTP status
+    /// so route error-mapping can target a whole status class by that enum's simple name (see
+    /// routes.toml); data-carrying refusals stay records.
+    sealed interface SweepError extends Cause {
+        /// Fixed-message failures of a dependency this slice calls. Every constant here is an HTTP 503 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 503 must not be added to it, and one
+        /// `*ServiceUnavailable*` pattern maps the whole enum.
+        enum ServiceUnavailable implements SweepError {
+            BOOKING_STORE("Booking store is unavailable");
+            private final String message;
+            ServiceUnavailable(String message) {
+                this.message = message;
+            }
+            @Override
+            public String message() {
+                return message;
+            }
+        }
+
+        static SweepError storeUnavailable() {
+            return ServiceUnavailable.BOOKING_STORE;
+        }
+    }
+
     static SweepHolds sweepHolds(@PgSql BookingStore store,
                                  @SeatReleasedPublisher Publisher<SeatReleased> seatReleased) {
-        @SuppressWarnings("JBCT-SEQ-01")
+        // JBCT-ORD-01: the slice-implementation record lives inside its own factory, so it can never precede it.
+        @SuppressWarnings({"JBCT-SEQ-01", "JBCT-ORD-01"})
         record sweepHolds(BookingStore store, Publisher<SeatReleased> seatReleased) implements SweepHolds {
             // JBCT pattern: Fork-Join -- the two reapers touch disjoint rows (held vs. confirmed) and
             // are independent, so they run in parallel; one fact is published per freed seat.

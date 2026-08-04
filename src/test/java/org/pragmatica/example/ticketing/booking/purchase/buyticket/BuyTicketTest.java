@@ -83,7 +83,7 @@ class BuyTicketTest {
                                             "STANDARD"))
              .await()
              .onSuccess(_ -> fail("a blocked seat must not be sellable"))
-             .onFailure(cause -> assertThat(cause).isInstanceOf(BuyTicket.BuyError.SeatNotSellable.class));
+             .onFailure(cause -> assertThat(cause).isEqualTo(BuyTicket.BuyError.StateConflict.SEAT_NOT_SELLABLE));
     }
 
     private BuyTicket buildSlice(BookingStore store, HttpClient gateway, QuotePrice quote, boolean onSale) {

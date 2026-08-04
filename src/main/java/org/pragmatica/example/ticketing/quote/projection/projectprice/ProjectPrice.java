@@ -15,6 +15,10 @@ import org.pragmatica.example.ticketing.shared.event.PriceChangedSubscription;
 /// Telescope leaf — system `ticketing` → subsystem `quote` → workflow `projection` → use case
 /// `project-price`. Event consumer (no HTTP route); a malformed fact or a transient store error is
 /// recovered to `Unit` so the subscription never wedges (design-out: monotonic upsert converges).
+///
+/// JBCT-UC-02: a fact consumer's input IS the published `PriceChanged` fact -- that is the subscription
+/// contract, so there is no Request/Response pair to declare.
+@SuppressWarnings("JBCT-UC-02")
 @Slice
 public interface ProjectPrice {
     /// Parsed identity of a `PriceChanged` fact: the event and price tier as value objects, so a
@@ -38,6 +42,8 @@ public interface ProjectPrice {
     Promise<Unit> execute(PriceChanged event);
 
     static ProjectPrice projectPrice(@PgSql PriceProjectionStore store) {
+        // JBCT-ORD-01: the slice-implementation record lives inside its own factory, so it can never precede it.
+        @SuppressWarnings("JBCT-ORD-01")
         record projectPrice(PriceProjectionStore store) implements ProjectPrice {
             @Override
             public Promise<Unit> execute(PriceChanged event) {

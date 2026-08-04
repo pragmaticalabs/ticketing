@@ -155,7 +155,7 @@ class SetPriceTest {
                                     "USD"))
                .await()
                .onSuccess(r -> fail("Expected store failure"))
-               .onFailure(cause -> assertThat(cause).isInstanceOf(SetPrice.PricingError.StoreUnavailable.class));
+               .onFailure(cause -> assertThat(cause).isEqualTo(SetPrice.PricingError.ServiceUnavailable.PRICING_STORE));
     }
 
     /// See BuyTicketTest for why this contract exists.

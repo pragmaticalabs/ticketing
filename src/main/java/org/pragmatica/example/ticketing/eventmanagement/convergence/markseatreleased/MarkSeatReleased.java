@@ -47,8 +47,16 @@ import org.pragmatica.example.ticketing.shared.event.SeatReleasedSubscription;
 /// NOT earned: **delivery**, exactly as in `mark-seat-sold`. Ordering only orders what arrives; the
 /// current ephemeral pub-sub is at-most-once, so a dropped `SeatReleased` strands the seat as `sold`
 /// here and no version guard can notice a version that never showed up.
+///
+/// JBCT-UC-02: a fact consumer's input IS the published `SeatReleased` fact -- that is the subscription
+/// contract, so there is no Request/Response pair to declare.
+@SuppressWarnings("JBCT-UC-02")
 @Slice
 public interface MarkSeatReleased {
+    @MarkSeatReleasedLog
+    @SeatReleasedSubscription
+    Promise<Unit> execute(SeatReleased event);
+
     sealed interface MarkSeatReleasedError extends Cause {
         record SeatNotFound(String seat) implements MarkSeatReleasedError {
             @Override
@@ -73,12 +81,9 @@ public interface MarkSeatReleased {
         }
     }
 
-    @MarkSeatReleasedLog
-    @SeatReleasedSubscription
-    Promise<Unit> execute(SeatReleased event);
-
     static MarkSeatReleased markSeatReleased(@PgSql EventStore store) {
-        @SuppressWarnings("JBCT-SEQ-01")
+        // JBCT-ORD-01: the slice-implementation record lives inside its own factory, so it can never precede it.
+        @SuppressWarnings({"JBCT-SEQ-01", "JBCT-ORD-01"})
         record markSeatReleased(EventStore store) implements MarkSeatReleased {
             // JBCT pattern: Condition -- bifurcate the inbound fact at the subsystem boundary: an
             // unparsable seat id is discarded, anything parsable is converged.

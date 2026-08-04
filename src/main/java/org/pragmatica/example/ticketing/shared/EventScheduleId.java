@@ -10,26 +10,28 @@ import org.pragmatica.lang.vo.Uuid;
 
 public record EventScheduleId(Uuid value) {
     public sealed interface Error extends Cause {
-        record Blank() implements Error {
-            @Override
-            public String message() {
-                return "Event schedule id must not be blank";
+        /// Fixed-message parse refusals for this id. Both are pure syntax failures on client input, and
+        /// every slice re-declares them as its own HTTP 400 cause before answering, so they are grouped
+        /// under one enum named for that single routing outcome rather than a catch-all `General`.
+        enum Invalid implements Error {
+            BLANK("Event schedule id must not be blank"),
+            MALFORMED("Event schedule id must be a valid UUID");
+            private final String message;
+            Invalid(String message) {
+                this.message = message;
             }
-        }
-
-        record Malformed() implements Error {
             @Override
             public String message() {
-                return "Event schedule id must be a valid UUID";
+                return message;
             }
         }
 
         static Error blank() {
-            return new Blank();
+            return Invalid.BLANK;
         }
 
         static Error malformed() {
-            return new Malformed();
+            return Invalid.MALFORMED;
         }
     }
 

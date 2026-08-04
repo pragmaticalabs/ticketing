@@ -20,10 +20,11 @@ import org.pragmatica.example.ticketing.shared.EventId;
 /// Guarantee actually earned: the guarded `UPDATE ... AND status = 'draft'` is the sole authority on
 /// whether the event opened. It refuses silently, so the reason is established by reading the event back
 /// -- a *separate* statement, and therefore a best-effort diagnosis. Every refusal reason is now
-/// distinct: a missing event is [OpenEventError.EventNotFound], an event already selling is
-/// [OpenEventError.AlreadyOpen], a cancelled event is [OpenEventError.LifecycleConflict#EVENT_CANCELLED],
+/// distinct: a missing event is [OpenEventError.EntityMissing#EVENT], an event already selling is
+/// [OpenEventError.LifecycleConflict#EVENT_ALREADY_OPEN], a cancelled event is
+/// [OpenEventError.LifecycleConflict#EVENT_CANCELLED],
 /// and a diagnosis that disagrees with the refusal is [OpenEventError.TransitionRaced]. Previously every
-/// refusal was reported as `AlreadyOpen`, which was simply false for a cancelled event.
+/// refusal was reported as "already open", which was simply false for a cancelled event.
 ///
 /// Three of those refusals are conflicts on the event's lifecycle state, so all three map to HTTP 409 in
 /// this slice's `routes.toml`. They are declared here rather than shared with `add-seat`/`cancel-event`
@@ -35,15 +36,17 @@ public interface OpenEvent {
 
     record Response(String event) {}
 
+    Promise<Response> execute(Request request);
+
     sealed interface OpenEventError extends Cause {
-        /// Fixed-message refusals by the lifecycle guard. Every constant here is a conflict on the event's
-        /// current status and therefore HTTP 409, which is why the group is named for the routing rule
-        /// rather than called `General`: a cause that is *not* a 409 must not be added to it, and this
-        /// slice's `routes.toml` maps the whole enum with one `*LifecycleConflict*` pattern.
-        enum LifecycleConflict implements OpenEventError {
-            EVENT_CANCELLED("Event is cancelled");
+        /// Fixed-message reads that found nothing. Every constant here is an HTTP 404 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 404 must not be added to it, and one
+        /// `*EntityMissing*` pattern maps the whole enum.
+        enum EntityMissing implements OpenEventError {
+            EVENT("Event not found");
             private final String message;
-            LifecycleConflict(String message) {
+            EntityMissing(String message) {
                 this.message = message;
             }
             @Override
@@ -52,24 +55,36 @@ public interface OpenEvent {
             }
         }
 
-        record EventNotFound() implements OpenEventError {
+        /// Fixed-message failures of a dependency this slice calls. Every constant here is an HTTP 503 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 503 must not be added to it, and one
+        /// `*ServiceUnavailable*` pattern maps the whole enum.
+        enum ServiceUnavailable implements OpenEventError {
+            EVENT_MANAGEMENT_STORE("Event management store is unavailable");
+            private final String message;
+            ServiceUnavailable(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "Event not found";
+                return message;
             }
         }
 
-        record AlreadyOpen() implements OpenEventError {
-            @Override
-            public String message() {
-                return "Event is already open for sale";
+        /// Fixed-message refusals by the lifecycle guard. Every constant here is a conflict on the event's
+        /// current status and therefore HTTP 409, which is why the group is named for the routing rule
+        /// rather than called `General`: a cause that is *not* a 409 must not be added to it, and this
+        /// slice's `routes.toml` maps the whole enum with one `*LifecycleConflict*` pattern.
+        enum LifecycleConflict implements OpenEventError {
+            EVENT_CANCELLED("Event is cancelled"),
+            EVENT_ALREADY_OPEN("Event is already open for sale");
+            private final String message;
+            LifecycleConflict(String message) {
+                this.message = message;
             }
-        }
-
-        record StoreUnavailable() implements OpenEventError {
             @Override
             public String message() {
-                return "Event management store is unavailable";
+                return message;
             }
         }
 
@@ -97,15 +112,15 @@ public interface OpenEvent {
         }
 
         static OpenEventError eventNotFound() {
-            return new EventNotFound();
+            return EntityMissing.EVENT;
         }
 
         static OpenEventError alreadyOpen() {
-            return new AlreadyOpen();
+            return LifecycleConflict.EVENT_ALREADY_OPEN;
         }
 
         static OpenEventError storeUnavailable() {
-            return new StoreUnavailable();
+            return ServiceUnavailable.EVENT_MANAGEMENT_STORE;
         }
 
         /// The event is cancelled -- a terminal status that no longer opens for sale.
@@ -122,10 +137,9 @@ public interface OpenEvent {
         }
     }
 
-    Promise<Response> execute(Request request);
-
     static OpenEvent openEvent(@PgSql EventStore store) {
-        @SuppressWarnings("JBCT-SEQ-01")
+        // JBCT-ORD-01: the slice-implementation record lives inside its own factory, so it can never precede it.
+        @SuppressWarnings({"JBCT-SEQ-01", "JBCT-ORD-01"})
         record openEvent(EventStore store) implements OpenEvent {
             // JBCT pattern: Sequencer -- validate -> guarded open.
             @Override

@@ -11,4 +11,4 @@ default = "role:operator"
 [errors]
 strict = true
 default = 500
-HTTP_503 = ["*StoreUnavailable*"]
+HTTP_503 = ["*ServiceUnavailable*"]

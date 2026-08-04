@@ -40,11 +40,38 @@ public interface CreateEvent {
         }
     }
 
+    Promise<Response> execute(Request request);
+
     sealed interface CreateEventError extends Cause {
-        record BlankVenue() implements CreateEventError {
+        /// Fixed-message request fields this slice rejects as unparseable. Every constant here is an HTTP 400 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 400 must not be added to it, and one
+        /// `*FieldRejected*` pattern maps the whole enum.
+        enum FieldRejected implements CreateEventError {
+            BLANK_VENUE("Venue must not be blank");
+            private final String message;
+            FieldRejected(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "Venue must not be blank";
+                return message;
+            }
+        }
+
+        /// Fixed-message failures of a dependency this slice calls. Every constant here is an HTTP 503 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 503 must not be added to it, and one
+        /// `*ServiceUnavailable*` pattern maps the whole enum.
+        enum ServiceUnavailable implements CreateEventError {
+            EVENT_MANAGEMENT_STORE("Event management store is unavailable");
+            private final String message;
+            ServiceUnavailable(String message) {
+                this.message = message;
+            }
+            @Override
+            public String message() {
+                return message;
             }
         }
 
@@ -55,15 +82,8 @@ public interface CreateEvent {
             }
         }
 
-        record StoreUnavailable() implements CreateEventError {
-            @Override
-            public String message() {
-                return "Event management store is unavailable";
-            }
-        }
-
         static CreateEventError blankVenue() {
-            return new BlankVenue();
+            return FieldRejected.BLANK_VENUE;
         }
 
         static CreateEventError malformedOnSaleAt(String raw) {
@@ -71,14 +91,13 @@ public interface CreateEvent {
         }
 
         static CreateEventError storeUnavailable() {
-            return new StoreUnavailable();
+            return ServiceUnavailable.EVENT_MANAGEMENT_STORE;
         }
     }
 
-    Promise<Response> execute(Request request);
-
     static CreateEvent createEvent(@PgSql EventStore store) {
-        @SuppressWarnings("JBCT-SEQ-01")
+        // JBCT-ORD-01: the slice-implementation record lives inside its own factory, so it can never precede it.
+        @SuppressWarnings({"JBCT-SEQ-01", "JBCT-ORD-01"})
         record createEvent(EventStore store) implements CreateEvent {
             // JBCT pattern: Sequencer -- validate venue + on-sale time -> register event.
             @Override

@@ -38,18 +38,38 @@ public interface CancelEvent {
 
     record Response(String event) {}
 
+    Promise<Response> execute(Request request);
+
     sealed interface CancelEventError extends Cause {
-        record EventNotFound() implements CancelEventError {
+        /// Fixed-message reads that found nothing. Every constant here is an HTTP 404 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 404 must not be added to it, and one
+        /// `*EntityMissing*` pattern maps the whole enum.
+        enum EntityMissing implements CancelEventError {
+            EVENT("Event not found");
+            private final String message;
+            EntityMissing(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "Event not found";
+                return message;
             }
         }
 
-        record StoreUnavailable() implements CancelEventError {
+        /// Fixed-message failures of a dependency this slice calls. Every constant here is an HTTP 503 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 503 must not be added to it, and one
+        /// `*ServiceUnavailable*` pattern maps the whole enum.
+        enum ServiceUnavailable implements CancelEventError {
+            EVENT_MANAGEMENT_STORE("Event management store is unavailable");
+            private final String message;
+            ServiceUnavailable(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "Event management store is unavailable";
+                return message;
             }
         }
 
@@ -76,11 +96,11 @@ public interface CancelEvent {
         }
 
         static CancelEventError eventNotFound() {
-            return new EventNotFound();
+            return EntityMissing.EVENT;
         }
 
         static CancelEventError storeUnavailable() {
-            return new StoreUnavailable();
+            return ServiceUnavailable.EVENT_MANAGEMENT_STORE;
         }
 
         static CancelEventError transitionRaced(EventStatus status) {
@@ -92,10 +112,9 @@ public interface CancelEvent {
         }
     }
 
-    Promise<Response> execute(Request request);
-
     static CancelEvent cancelEvent(@PgSql EventStore store) {
-        @SuppressWarnings("JBCT-SEQ-01")
+        // JBCT-ORD-01: the slice-implementation record lives inside its own factory, so it can never precede it.
+        @SuppressWarnings({"JBCT-SEQ-01", "JBCT-ORD-01"})
         record cancelEvent(EventStore store) implements CancelEvent {
             // JBCT pattern: Sequencer -- validate -> guarded cancel.
             @Override

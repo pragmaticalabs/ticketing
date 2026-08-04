@@ -53,8 +53,16 @@ import org.pragmatica.example.ticketing.shared.event.SeatSoldSubscription;
 /// booking holds it sold, and nothing in this slice detects the gap -- a version guard cannot notice a
 /// version that never showed up. Closing that needs durable subscriptions or a reconciliation sweep,
 /// neither of which exists yet.
+///
+/// JBCT-UC-02: a fact consumer's input IS the published `SeatSold` fact -- that is the subscription
+/// contract, so there is no Request/Response pair to declare.
+@SuppressWarnings("JBCT-UC-02")
 @Slice
 public interface MarkSeatSold {
+    @MarkSeatSoldLog
+    @SeatSoldSubscription
+    Promise<Unit> execute(SeatSold event);
+
     sealed interface MarkSeatSoldError extends Cause {
         record SeatNotFound(String seat) implements MarkSeatSoldError {
             @Override
@@ -79,12 +87,9 @@ public interface MarkSeatSold {
         }
     }
 
-    @MarkSeatSoldLog
-    @SeatSoldSubscription
-    Promise<Unit> execute(SeatSold event);
-
     static MarkSeatSold markSeatSold(@PgSql EventStore store) {
-        @SuppressWarnings("JBCT-SEQ-01")
+        // JBCT-ORD-01: the slice-implementation record lives inside its own factory, so it can never precede it.
+        @SuppressWarnings({"JBCT-SEQ-01", "JBCT-ORD-01"})
         record markSeatSold(EventStore store) implements MarkSeatSold {
             // JBCT pattern: Condition -- bifurcate the inbound fact at the subsystem boundary: an
             // unparsable seat id is discarded, anything parsable is converged.

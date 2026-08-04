@@ -24,13 +24,25 @@ public interface CheckHold {
 
     record Response(String seat, String state) {}
 
-    /// Closed set of check failures. Each is a distinct record so route error-mapping can target it
-    /// by simple name (see routes.toml).
+    Promise<Response> execute(Request request);
+
+    /// Closed set of check failures. Fixed-message refusals are grouped into one enum per HTTP status
+    /// so route error-mapping can target a whole status class by that enum's simple name (see
+    /// routes.toml); data-carrying refusals stay records.
     sealed interface CheckError extends Cause {
-        record StoreUnavailable() implements CheckError {
+        /// Fixed-message failures of a dependency this slice calls. Every constant here is an HTTP 503 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 503 must not be added to it, and one
+        /// `*ServiceUnavailable*` pattern maps the whole enum.
+        enum ServiceUnavailable implements CheckError {
+            BOOKING_STORE("Booking store is unavailable");
+            private final String message;
+            ServiceUnavailable(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "Booking store is unavailable";
+                return message;
             }
         }
 
@@ -48,7 +60,7 @@ public interface CheckHold {
         }
 
         static CheckError storeUnavailable() {
-            return new StoreUnavailable();
+            return ServiceUnavailable.BOOKING_STORE;
         }
 
         static CheckError invalidSeat(Cause cause) {
@@ -56,9 +68,9 @@ public interface CheckHold {
         }
     }
 
-    Promise<Response> execute(Request request);
-
     static CheckHold checkHold(@PgSql BookingStore store) {
+        // JBCT-ORD-01: the slice-implementation record lives inside its own factory, so it can never precede it.
+        @SuppressWarnings("JBCT-ORD-01")
         record checkHold(BookingStore store) implements CheckHold {
             // JBCT pattern: Sequencer -- validate -> read the hold's decay snapshot.
             @Override

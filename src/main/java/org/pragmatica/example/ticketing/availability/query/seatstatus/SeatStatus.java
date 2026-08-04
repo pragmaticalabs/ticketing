@@ -20,11 +20,23 @@ public interface SeatStatus {
 
     record Response(String seat, String state) {}
 
+    @SeatStatusCache
+    Promise<Response> execute(Request request);
+
     sealed interface AvailabilityError extends Cause {
-        record StoreUnavailable() implements AvailabilityError {
+        /// Fixed-message failures of a dependency this slice calls. Every constant here is an HTTP 503 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 503 must not be added to it, and one
+        /// `*ServiceUnavailable*` pattern maps the whole enum.
+        enum ServiceUnavailable implements AvailabilityError {
+            AVAILABILITY_STORE("Availability store is unavailable");
+            private final String message;
+            ServiceUnavailable(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "Availability store is unavailable";
+                return message;
             }
         }
 
@@ -42,7 +54,7 @@ public interface SeatStatus {
         }
 
         static AvailabilityError storeUnavailable() {
-            return new StoreUnavailable();
+            return ServiceUnavailable.AVAILABILITY_STORE;
         }
 
         static AvailabilityError invalidSeat(Cause cause) {
@@ -50,11 +62,9 @@ public interface SeatStatus {
         }
     }
 
-    @SeatStatusCache
-    Promise<Response> execute(Request request);
-
     static SeatStatus seatStatus(@PgSql SeatStatusStore store) {
-        @SuppressWarnings("JBCT-SEQ-01")
+        // JBCT-ORD-01: the slice-implementation record lives inside its own factory, so it can never precede it.
+        @SuppressWarnings({"JBCT-SEQ-01", "JBCT-ORD-01"})
         record seatStatus(SeatStatusStore store) implements SeatStatus {
             // JBCT pattern: Sequencer -- validate -> read -> respond.
             @Override

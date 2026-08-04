@@ -75,6 +75,6 @@ class SeatStatusTest {
         failing.execute(new Request(UUID.randomUUID().toString()))
                .await()
                .onSuccess(r -> fail("Expected store failure"))
-               .onFailure(cause -> assertThat(cause).isInstanceOf(SeatStatus.AvailabilityError.StoreUnavailable.class));
+               .onFailure(cause -> assertThat(cause).isEqualTo(SeatStatus.AvailabilityError.ServiceUnavailable.AVAILABILITY_STORE));
     }
 }

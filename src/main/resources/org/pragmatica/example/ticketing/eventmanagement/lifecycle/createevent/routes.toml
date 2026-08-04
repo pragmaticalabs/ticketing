@@ -10,5 +10,5 @@ default = "role:admin"
 [errors]
 strict = true
 default = 500
-HTTP_400 = ["*Blank*", "*Malformed*"]
-HTTP_503 = ["*StoreUnavailable*"]
+HTTP_400 = ["*FieldRejected*", "*Malformed*"]
+HTTP_503 = ["*ServiceUnavailable*"]

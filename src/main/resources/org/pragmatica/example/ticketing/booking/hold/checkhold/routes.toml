@@ -12,4 +12,4 @@ default = "authenticated"
 strict = true
 default = 500
 HTTP_400 = ["*InvalidRequest*"]
-HTTP_503 = ["*StoreUnavailable*"]
+HTTP_503 = ["*ServiceUnavailable*"]

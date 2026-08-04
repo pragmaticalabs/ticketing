@@ -202,65 +202,80 @@ public interface BuyTicket {
         }
     }
 
-    /// Closed set of buy failures. Each is a distinct record so route error-mapping can target it by
-    /// simple name (see routes.toml).
+    Promise<Response> execute(Request request);
+
+    /// Closed set of buy failures. Fixed-message refusals are grouped into one enum per HTTP
+    /// status so route error-mapping can target a whole status class by that enum's simple name (see
+    /// routes.toml); data-carrying refusals stay records.
     sealed interface BuyError extends Cause {
-        record SeatUnavailable() implements BuyError {
+        /// Fixed-message refusals by a guard on current state. Every constant here is an HTTP 409 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 409 must not be added to it, and one
+        /// `*StateConflict*` pattern maps the whole enum.
+        enum StateConflict implements BuyError {
+            SEAT_UNAVAILABLE("Seat is no longer available"),
+            EVENT_NOT_SELLING("Event is not currently selling"),
+            /// The operator has withheld this seat from sale (blocked or withdrawn), or event-management
+            /// could not answer. Distinct from [#SEAT_UNAVAILABLE], which means another customer holds or
+            /// owns the seat: this one is not resolved by waiting for a hold to lapse.
+            SEAT_NOT_SELLABLE("Seat is not available for sale");
+            private final String message;
+            StateConflict(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "Seat is no longer available";
+                return message;
             }
         }
 
-        record EventNotSelling() implements BuyError {
+        /// Fixed-message payment refusals by the gateway. Every constant here is an HTTP 402 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 402 must not be added to it, and one
+        /// `*PaymentRefused*` pattern maps the whole enum.
+        enum PaymentRefused implements BuyError {
+            DECLINED("Payment was declined");
+            private final String message;
+            PaymentRefused(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "Event is not currently selling";
+                return message;
             }
         }
 
-        record CustomerIneligible() implements BuyError {
+        /// Fixed-message well-formed requests refused on meaning. Every constant here is an HTTP 422 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 422 must not be added to it, and one
+        /// `*Unprocessable*` pattern maps the whole enum.
+        enum Unprocessable implements BuyError {
+            CUSTOMER_INELIGIBLE("Customer has too many active bookings");
+            private final String message;
+            Unprocessable(String message) {
+                this.message = message;
+            }
             @Override
             public String message() {
-                return "Customer has too many active bookings";
+                return message;
             }
         }
 
-        record PriceUnavailable() implements BuyError {
-            @Override
-            public String message() {
-                return "No price is available for this event and tier";
+        /// Fixed-message failures of a dependency this slice calls. Every constant here is an HTTP 503 in this
+        /// slice's `routes.toml`, which is why the group is named for that routing rule rather than
+        /// `General`: a cause that is *not* a 503 must not be added to it, and one
+        /// `*ServiceUnavailable*` pattern maps the whole enum.
+        enum ServiceUnavailable implements BuyError {
+            BOOKING_STORE("Booking store is unavailable"),
+            PAYMENT_PROVIDER("Payment provider is unavailable"),
+            PRICE("No price is available for this event and tier");
+            private final String message;
+            ServiceUnavailable(String message) {
+                this.message = message;
             }
-        }
-
-        record PaymentDeclined() implements BuyError {
             @Override
             public String message() {
-                return "Payment was declined";
-            }
-        }
-
-        record PaymentProviderUnavailable() implements BuyError {
-            @Override
-            public String message() {
-                return "Payment provider is unavailable";
-            }
-        }
-
-        record StoreUnavailable() implements BuyError {
-            @Override
-            public String message() {
-                return "Booking store is unavailable";
-            }
-        }
-
-        /// The operator has withheld this seat from sale (blocked or withdrawn), or event-management
-        /// could not answer. Distinct from [SeatUnavailable], which means another customer holds or
-        /// owns the seat: this one is not resolved by waiting for a hold to lapse.
-        record SeatNotSellable() implements BuyError {
-            @Override
-            public String message() {
-                return "Seat is not available for sale";
+                return message;
             }
         }
 
@@ -281,7 +296,7 @@ public interface BuyTicket {
         /// lies outside the field's admissible domain -- here, a well-formed token that names no member
         /// of the closed `PriceTier` set. Well-formed-but-unacceptable is a semantic refusal rather than
         /// a syntax error, which is why it earns 422 where [InvalidRequest] earns 400. It sits beside
-        /// [CustomerIneligible], the failure this slice already reports as 422.
+        /// [Unprocessable#CUSTOMER_INELIGIBLE], the failure this slice already reports as 422.
         record UnacceptableValue(String field, String detail) implements BuyError {
             @Override
             public String message() {
@@ -290,35 +305,35 @@ public interface BuyTicket {
         }
 
         static BuyError seatUnavailable() {
-            return new SeatUnavailable();
+            return StateConflict.SEAT_UNAVAILABLE;
         }
 
         static BuyError eventNotSelling() {
-            return new EventNotSelling();
+            return StateConflict.EVENT_NOT_SELLING;
         }
 
         static BuyError customerIneligible() {
-            return new CustomerIneligible();
+            return Unprocessable.CUSTOMER_INELIGIBLE;
         }
 
         static BuyError priceUnavailable() {
-            return new PriceUnavailable();
+            return ServiceUnavailable.PRICE;
         }
 
         static BuyError paymentDeclined() {
-            return new PaymentDeclined();
+            return PaymentRefused.DECLINED;
         }
 
         static BuyError paymentProviderUnavailable() {
-            return new PaymentProviderUnavailable();
+            return ServiceUnavailable.PAYMENT_PROVIDER;
         }
 
         static BuyError storeUnavailable() {
-            return new StoreUnavailable();
+            return ServiceUnavailable.BOOKING_STORE;
         }
 
         static BuyError seatNotSellable() {
-            return new SeatNotSellable();
+            return StateConflict.SEAT_NOT_SELLABLE;
         }
 
         static BuyError invalidCustomer(Cause cause) {
@@ -343,8 +358,6 @@ public interface BuyTicket {
         return customerId + "@customers.ticketing.example";
     }
 
-    Promise<Response> execute(Request request);
-
     static BuyTicket buyTicket(@PgSql BookingStore store,
                                @Http HttpClient gateway,
                                @Notify NotificationSender notifier,
@@ -352,7 +365,8 @@ public interface BuyTicket {
                                SaleStatus saleStatus,
                                SeatSellability seatSellability,
                                @SeatSoldPublisher Publisher<SeatSold> seatSold) {
-        @SuppressWarnings("JBCT-SEQ-01")
+        // JBCT-ORD-01: the slice-implementation record lives inside its own factory, so it can never precede it.
+        @SuppressWarnings({"JBCT-SEQ-01", "JBCT-ORD-01"})
         record buyTicket(BookingStore store,
                          HttpClient gateway,
                          NotificationSender notifier,

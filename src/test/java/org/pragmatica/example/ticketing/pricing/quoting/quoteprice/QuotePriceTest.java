@@ -114,6 +114,6 @@ class QuotePriceTest {
                                     "STANDARD"))
                .await()
                .onSuccess(r -> fail("Expected store failure"))
-               .onFailure(cause -> assertThat(cause).isInstanceOf(QuotePrice.QuoteError.StoreUnavailable.class));
+               .onFailure(cause -> assertThat(cause).isEqualTo(QuotePrice.QuoteError.ServiceUnavailable.PRICING_STORE));
     }
 }
