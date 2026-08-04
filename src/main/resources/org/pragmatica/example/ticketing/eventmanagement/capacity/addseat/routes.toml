@@ -3,9 +3,15 @@ prefix = "/api/v1/seats/add"
 [routes]
 execute = "POST /"
 
+# role:admin: grows an event's saleable capacity -- catalogue administration, never a customer action.
+[security]
+default = "role:admin"
+
 [errors]
 strict = true
 default = 500
-HTTP_400 = ["*Blank*", "*Malformed*", "*NonPositiveNumber*", "*Unknown*"]
+HTTP_400 = ["*InvalidRequest*"]
 HTTP_404 = ["*EventNotFound*"]
+HTTP_409 = ["*LifecycleConflict*"]
+HTTP_422 = ["*UnacceptableValue*"]
 HTTP_503 = ["*StoreUnavailable*"]

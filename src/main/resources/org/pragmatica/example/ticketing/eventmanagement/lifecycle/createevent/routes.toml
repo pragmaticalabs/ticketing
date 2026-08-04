@@ -3,6 +3,10 @@ prefix = "/api/v1/events/create"
 [routes]
 execute = "POST /"
 
+# role:admin: creates a catalogue entry -- an organiser action, never a customer one.
+[security]
+default = "role:admin"
+
 [errors]
 strict = true
 default = 500

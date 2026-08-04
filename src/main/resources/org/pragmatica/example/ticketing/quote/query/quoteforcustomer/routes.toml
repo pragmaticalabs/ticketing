@@ -3,9 +3,15 @@ prefix = "/api/v1/quotes"
 [routes]
 execute = "GET /{event}/{tier}"
 
+# public: reads the price projection for an event/tier -- the same published list price the shopper sees
+# before signing in, personalised by nothing.
+[security]
+default = "public"
+
 [errors]
 strict = true
 default = 500
-HTTP_400 = ["*Blank*", "*Malformed*", "*Unknown*"]
+HTTP_400 = ["*InvalidRequest*"]
 HTTP_404 = ["*PriceNotFound*"]
+HTTP_422 = ["*UnacceptableValue*"]
 HTTP_503 = ["*StoreUnavailable*"]

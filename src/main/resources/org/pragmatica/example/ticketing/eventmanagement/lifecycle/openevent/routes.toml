@@ -3,10 +3,15 @@ prefix = "/api/v1/events/open"
 [routes]
 execute = "POST /{event}"
 
+# role:admin: puts an event on sale -- the lifecycle transition that exposes inventory to the public, so it
+# belongs to the organiser alone.
+[security]
+default = "role:admin"
+
 [errors]
 strict = true
 default = 500
-HTTP_400 = ["*Blank*", "*Malformed*"]
+HTTP_400 = ["*InvalidRequest*"]
 HTTP_404 = ["*EventNotFound*"]
-HTTP_409 = ["*AlreadyOpen*"]
+HTTP_409 = ["*AlreadyOpen*", "*LifecycleConflict*", "*TransitionRaced*"]
 HTTP_503 = ["*StoreUnavailable*"]

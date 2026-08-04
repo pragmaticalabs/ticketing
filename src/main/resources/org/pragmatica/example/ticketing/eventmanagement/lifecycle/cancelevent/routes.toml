@@ -3,9 +3,15 @@ prefix = "/api/v1/events/cancel"
 [routes]
 execute = "POST /{event}"
 
+# role:admin: a terminal lifecycle transition that withdraws a whole event from sale -- the most destructive
+# action in the catalogue.
+[security]
+default = "role:admin"
+
 [errors]
 strict = true
 default = 500
-HTTP_400 = ["*Blank*", "*Malformed*"]
+HTTP_400 = ["*InvalidRequest*"]
 HTTP_404 = ["*EventNotFound*"]
+HTTP_409 = ["*TransitionRaced*"]
 HTTP_503 = ["*StoreUnavailable*"]

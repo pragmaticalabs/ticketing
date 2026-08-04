@@ -3,9 +3,15 @@ prefix = "/api/v1/pricing/quote"
 [routes]
 execute = "GET /{event}/{tier}"
 
+# public: the list price of a tier -- the figure printed on the public event page, identical for every
+# caller and derived from no customer data.
+[security]
+default = "public"
+
 [errors]
 strict = true
 default = 500
-HTTP_400 = ["*Blank*", "*Malformed*", "*Unknown*"]
+HTTP_400 = ["*InvalidRequest*"]
 HTTP_404 = ["*PriceNotFound*"]
+HTTP_422 = ["*UnacceptableValue*"]
 HTTP_503 = ["*StoreUnavailable*"]

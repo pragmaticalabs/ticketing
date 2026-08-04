@@ -1,0 +1,16 @@
+prefix = "/api/v1/seats/sellability"
+
+[routes]
+execute = "GET /{seat}"
+
+# public: whether a seat is withheld from sale is exactly what a seat map renders, and the response
+# carries no customer, booking or price data -- the same reasoning as availability's seat-status read.
+[security]
+default = "public"
+
+[errors]
+strict = true
+default = 500
+HTTP_400 = ["*InvalidRequest*"]
+HTTP_404 = ["*SeatNotFound*"]
+HTTP_503 = ["*StoreUnavailable*"]

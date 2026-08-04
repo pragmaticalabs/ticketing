@@ -1,6 +1,9 @@
 # Aether resource declarations. Every @ResourceQualifier config section a slice references must
-# appear here; the blueprint generator validates this at build time. (HTTP payment gateway,
-# notification, and scheduling sections are added with the booking slice that uses them.)
+# appear here. Parameter-level qualifiers and reactive method qualifiers (topics, scheduling) reach
+# the slice manifest and so are validated by the blueprint generator at build time; method-level
+# *interceptor* qualifiers do not, and fail only at slice activation — see the cache/log blocks at
+# the end of this file. (HTTP payment gateway, notification, and scheduling sections are added with
+# the booking slice that uses them.)
 
 # --- Persistence (@PgSql -> config "database") ---
 [database]
@@ -63,4 +66,87 @@ pool_size = 2
 connect_timeout = "5s"
 command_timeout = "10s"
 helo_hostname = "ticketing.example"
+
+# --- Read-path caches (rc3 CacheMethodInterceptor, method-level qualifiers on the read slices'
+#     execute()). Every key below is mandatory: CacheConfig's DEFAULTS field is private and named
+#     DEFAULTS, while the binder's per-key fallback looks up a *public* field named DEFAULT, so it
+#     never fires — a missing key fails the slice with Fatal.ConfigurationFailed at activation.
+#     Unlike the topic and scheduling sections above, these are NOT build-time validated: method-level
+#     interceptors are absent from the slice manifest, so generate-blueprint never sees them.
+#
+#     mode = "LOCAL" everywhere. TIERED/DISTRIBUTED hold app-typed results and depend on the rc3
+#     codec-scoping fix, which this repo has not exercised; LOCAL needs no serialization and its
+#     InMemoryCache never fails, so the interceptor's fail-closed path is unreachable. Consequence to
+#     keep in mind: each of the 5 instances caches privately and nothing invalidates on a fact, so
+#     ttl_seconds is the sole bound on staleness. Rationale per TTL is in each qualifier's javadoc. ---
+[cache.availability.seat_status]
+cache_name = "seat-status"
+strategy = "CACHE_ASIDE"
+ttl_seconds = 2
+max_entries = 10000
+mode = "LOCAL"
+
+[cache.availability.sold_count]
+cache_name = "sold-count"
+strategy = "CACHE_ASIDE"
+ttl_seconds = 5
+max_entries = 1000
+mode = "LOCAL"
+
+[cache.quote.quote_for_customer]
+cache_name = "quote-for-customer"
+strategy = "CACHE_ASIDE"
+ttl_seconds = 5
+max_entries = 1000
+mode = "LOCAL"
+
+# --- Fact-consumer logging (rc3 LoggingMethodInterceptor). src/main/java has no logger of its own
+#     (log4j/slf4j are test-scope in pom.xml); the interceptor brings its own slf4j binding, which is
+#     what makes an otherwise-silent consumer observable. All five keys are mandatory per section for
+#     the same DEFAULT-vs-DEFAULTS reason as the caches above.
+#
+#     level = "INFO" throughout: the interceptor has no failure-only level, so anything lower hides
+#     the divergence under a default production config. Volume is bounded by the sale/release/repricing
+#     rate, never by read traffic. log_args = true is safe here and only here — the fact records carry
+#     identifiers, amounts and versions, no customer, contact or payment data — and it is what names
+#     the seat or event to investigate.
+#
+#     log_result splits the five by where .recover() sits. The two eventmanagement consumers propagate
+#     their failures, so the interceptor sees the typed cause and logging it is the whole point. The
+#     three projections recover to Unit *inside* execute, so the interceptor only ever observes
+#     Success(()) — logging that would print a constant, so they log arrival and duration instead. ---
+[log.eventmanagement.mark_seat_sold]
+name = "mark-seat-sold"
+level = "INFO"
+log_args = true
+log_result = true
+log_duration = true
+
+[log.eventmanagement.mark_seat_released]
+name = "mark-seat-released"
+level = "INFO"
+log_args = true
+log_result = true
+log_duration = true
+
+[log.availability.project_seat_sold]
+name = "project-seat-sold"
+level = "INFO"
+log_args = true
+log_result = false
+log_duration = true
+
+[log.availability.project_seat_released]
+name = "project-seat-released"
+level = "INFO"
+log_args = true
+log_result = false
+log_duration = true
+
+[log.quote.project_price]
+name = "project-price"
+level = "INFO"
+log_args = true
+log_result = false
+log_duration = true
 

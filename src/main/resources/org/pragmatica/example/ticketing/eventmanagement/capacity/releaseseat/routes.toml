@@ -3,9 +3,14 @@ prefix = "/api/v1/seats/release"
 [routes]
 execute = "POST /{seat}"
 
+# role:admin: returns a blocked seat to sale -- the inverse of block-seat, and equally an administrative
+# capacity decision.
+[security]
+default = "role:admin"
+
 [errors]
 strict = true
 default = 500
-HTTP_400 = ["*Blank*", "*Malformed*"]
+HTTP_400 = ["*InvalidRequest*"]
 HTTP_409 = ["*SeatNotBlocked*"]
 HTTP_503 = ["*StoreUnavailable*"]

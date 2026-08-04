@@ -3,6 +3,11 @@ prefix = "/api/v1/booking/holds/sweep"
 [routes]
 execute = "POST /"
 
+# role:operator: a housekeeping sweep that expires other customers' holds in bulk -- an operations action,
+# not a customer one, and it is also driven on a schedule.
+[security]
+default = "role:operator"
+
 [errors]
 strict = true
 default = 500

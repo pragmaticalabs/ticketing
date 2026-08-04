@@ -3,11 +3,16 @@ prefix = "/api/v1/booking/buy"
 [routes]
 execute = "POST /"
 
+# authenticated: takes payment and issues a ticket against a named customer -- the strongest reason in this
+# subsystem for a credential to exist.
+[security]
+default = "authenticated"
+
 [errors]
 strict = true
 default = 500
-HTTP_400 = ["*Blank*", "*Malformed*", "*Unknown*"]
+HTTP_400 = ["*InvalidRequest*"]
 HTTP_402 = ["*PaymentDeclined*"]
-HTTP_409 = ["*SeatUnavailable*", "*EventNotSelling*"]
-HTTP_422 = ["*CustomerIneligible*"]
+HTTP_409 = ["*SeatUnavailable*", "*EventNotSelling*", "*SeatNotSellable*"]
+HTTP_422 = ["*CustomerIneligible*", "*UnacceptableValue*"]
 HTTP_503 = ["*StoreUnavailable*", "*PaymentProviderUnavailable*", "*PriceUnavailable*"]

@@ -3,8 +3,13 @@ prefix = "/api/v1/booking/holds"
 [routes]
 execute = "GET /{seat}"
 
+# authenticated: discloses who holds a seat and until when -- booking state, not published inventory, so it
+# stays behind a credential like the hold it reports on.
+[security]
+default = "authenticated"
+
 [errors]
 strict = true
 default = 500
-HTTP_400 = ["*Blank*", "*Malformed*"]
+HTTP_400 = ["*InvalidRequest*"]
 HTTP_503 = ["*StoreUnavailable*"]

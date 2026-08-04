@@ -3,9 +3,14 @@ prefix = "/api/v1/seats/block"
 [routes]
 execute = "POST /{seat}"
 
+# role:admin: withdraws a seat from sale (holds, house seats, damage) -- catalogue administration, never a
+# customer action.
+[security]
+default = "role:admin"
+
 [errors]
 strict = true
 default = 500
-HTTP_400 = ["*Blank*", "*Malformed*"]
+HTTP_400 = ["*InvalidRequest*"]
 HTTP_409 = ["*SeatUnavailable*"]
 HTTP_503 = ["*StoreUnavailable*"]

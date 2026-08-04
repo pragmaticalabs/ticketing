@@ -3,9 +3,14 @@ prefix = "/api/v1/booking/holds"
 [routes]
 execute = "POST /"
 
+# authenticated: a hold removes a seat from public inventory on a named customer's behalf, so anonymous
+# callers must not be able to exhaust capacity.
+[security]
+default = "authenticated"
+
 [errors]
 strict = true
 default = 500
-HTTP_400 = ["*Blank*", "*Malformed*"]
-HTTP_409 = ["*SeatUnavailable*"]
+HTTP_400 = ["*InvalidRequest*"]
+HTTP_409 = ["*SeatUnavailable*", "*SeatNotSellable*"]
 HTTP_503 = ["*StoreUnavailable*"]

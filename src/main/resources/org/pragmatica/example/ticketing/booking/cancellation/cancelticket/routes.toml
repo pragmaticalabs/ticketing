@@ -3,10 +3,15 @@ prefix = "/api/v1/booking/cancel"
 [routes]
 execute = "POST /"
 
+# authenticated: acts on one customer's own booking and triggers a refund -- the slice still checks
+# ownership (*NotOwner* -> 403), but the caller must first be somebody.
+[security]
+default = "authenticated"
+
 [errors]
 strict = true
 default = 500
-HTTP_400 = ["*Blank*", "*Malformed*"]
+HTTP_400 = ["*InvalidRequest*"]
 HTTP_403 = ["*NotOwner*"]
 HTTP_404 = ["*BookingNotFound*"]
 HTTP_409 = ["*AlreadyCancelled*"]

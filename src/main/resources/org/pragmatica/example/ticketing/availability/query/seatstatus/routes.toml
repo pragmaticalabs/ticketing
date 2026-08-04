@@ -3,8 +3,13 @@ prefix = "/api/v1/availability/seats"
 [routes]
 execute = "GET /{seat}"
 
+# public: published inventory -- a seat's availability is what a shopper reads before signing in, and the
+# response carries no customer, booking or price data.
+[security]
+default = "public"
+
 [errors]
 strict = true
 default = 500
-HTTP_400 = ["*Blank*", "*Malformed*"]
+HTTP_400 = ["*InvalidRequest*"]
 HTTP_503 = ["*StoreUnavailable*"]

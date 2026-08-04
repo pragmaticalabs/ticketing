@@ -3,9 +3,14 @@ prefix = "/api/v1/events/status"
 [routes]
 execute = "GET /{event}"
 
+# public: the event's own sale status and on-sale time -- exactly what a public event page renders, with no
+# customer or booking data attached.
+[security]
+default = "public"
+
 [errors]
 strict = true
 default = 500
-HTTP_400 = ["*Blank*", "*Malformed*"]
+HTTP_400 = ["*InvalidRequest*"]
 HTTP_404 = ["*EventNotFound*"]
 HTTP_503 = ["*StoreUnavailable*"]

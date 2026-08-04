@@ -1,0 +1,4 @@
+# Event-management / capacity / seat-sellability use case. Read on every hold and every purchase, so
+# it is sized like the other synchronous gate reads (sale-status).
+[blueprint]
+instances = 3

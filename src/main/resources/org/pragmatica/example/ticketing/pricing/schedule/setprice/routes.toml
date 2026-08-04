@@ -3,8 +3,13 @@ prefix = "/api/v1/pricing/set"
 [routes]
 execute = "POST /"
 
+# role:admin: establishes the price customers will be charged -- revenue-bearing catalogue administration.
+[security]
+default = "role:admin"
+
 [errors]
 strict = true
 default = 500
-HTTP_400 = ["*Blank*", "*Malformed*", "*Unknown*", "*NegativeAmount*"]
+HTTP_400 = ["*InvalidRequest*"]
+HTTP_422 = ["*UnacceptableValue*"]
 HTTP_503 = ["*StoreUnavailable*"]
