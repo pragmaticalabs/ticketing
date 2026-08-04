@@ -17,6 +17,7 @@ import org.pragmatica.lang.Promise;
 import org.pragmatica.lang.Result;
 import org.pragmatica.lang.Unit;
 import org.pragmatica.example.ticketing.booking.BookingStore;
+import org.pragmatica.example.ticketing.eventmanagement.capacity.seatsellability.SeatSellability;
 import org.pragmatica.example.ticketing.eventmanagement.sales.salestatus.SaleStatus;
 import org.pragmatica.example.ticketing.pricing.quoting.quoteprice.QuotePrice;
 import org.pragmatica.example.ticketing.shared.BookingId;
@@ -26,6 +27,7 @@ import org.pragmatica.example.ticketing.shared.PriceTier;
 import org.pragmatica.example.ticketing.shared.ReceiptId;
 import org.pragmatica.example.ticketing.shared.SeatId;
 import org.pragmatica.example.ticketing.shared.TicketId;
+import org.pragmatica.example.ticketing.shared.Validation;
 import org.pragmatica.example.ticketing.shared.event.SeatSold;
 import org.pragmatica.example.ticketing.shared.event.SeatSoldPublisher;
 
@@ -34,15 +36,27 @@ import org.pragmatica.example.ticketing.shared.event.SeatSoldPublisher;
 /// `ticketing` -> subsystem `booking` -> workflow `purchase` -> use case `buy-ticket`. One use
 /// case, one `Request`/`Response` pair, one `execute` method.
 ///
-/// Recovery classes:
-///   - **design-out**: the seat claim is a single guarded `INSERT ... ON CONFLICT ... RETURNING`;
-///     the loser of a contended seat fast-fails with SeatUnavailable -- no lock, no race.
-///   - **BER** (backward error recovery / saga): a payment failure after the seat is claimed
-///     releases the reservation; a failure after the payment is authorized voids the authorization
-///     and releases the reservation. Compensation lives in dedicated private helpers that re-raise
-///     the original typed failure.
-///   - **FER** (forward error recovery): the confirmation notification is best-effort -- a notify
-///     failure never fails the buy.
+/// Recovery, per step and by mechanism:
+///   - **design-out (seat contention)**: the seat claim is a single guarded `INSERT ... ON CONFLICT
+///     (seat_id) DO UPDATE ... RETURNING claim_id`; the loser of a contended seat fast-fails with
+///     SeatUnavailable -- no lock, no race. The saga carries the claim identity the database
+///     returned, so a concurrent reclaim rotates it and every later guarded transition fails closed.
+///     A customer's own live hold is admitted by the guard, which is how a hold becomes a purchase.
+///   - **BER (before the purchase is committed)**: every failure after the seat is claimed releases
+///     the reservation, and every failure after the gateway has approved also voids the
+///     authorization -- including an approval whose receipt cannot be parsed, which is voided with
+///     the raw receipt the gateway returned. Post-state of any failed buy: no reservation, no
+///     captured money. Compensation lives in dedicated private helpers that re-raise the original
+///     typed failure; the void is best-effort, so a gateway that is down during compensation leaves
+///     an authorization for the provider's own expiry to reap.
+///   - **FER (after the purchase is committed)**: the confirmation notification and the `SeatSold`
+///     fact publish are both best-effort single attempts. Once the booking row is written the
+///     purchase is irreversible, so neither may fail the call. A lost `SeatSold` leaves the read
+///     projections stale for that seat (see `publishSold`).
+///
+/// Not covered by any of the above: a gateway timeout on an authorization that in fact succeeded.
+/// The slice never learns the receipt id, and `/void` is keyed by receipt, so nothing can be voided
+/// -- the reservation is released and the stray authorization is left to the provider's expiry.
 ///
 /// Sale status and the authoritative price are read **synchronously** from the event-management and
 /// pricing slices (injected as plain factory parameters); the payment gateway is an `@Http` resource
@@ -64,13 +78,20 @@ public interface BuyTicket {
 
     /// Validated buy target. Raw request fields are parsed into value objects; all failures surface
     /// together via Result.all.
+    ///
+    /// Each field is mapped to a cause declared in this slice's own package, and the closing `mapError`
+    /// unwraps the composite Result.all builds around them: the generated router's error switch is
+    /// built from this package's `Cause` types alone, so a shared `SeatId.Error` -- or the composite
+    /// wrapping it -- would fall through to HTTP 500 rather than reaching the client as a refusal it
+    /// can act on.
     record ValidBuy(CustomerId customer, EventId event, SeatId seat, PriceTier tier) {
         static Result<ValidBuy> validBuy(Request request) {
-            return Result.all(CustomerId.customerId(request.customer()),
-                              EventId.eventId(request.event()),
-                              SeatId.seatId(request.seat()),
-                              PriceTier.priceTier(request.tier()))
-                         .map(ValidBuy::new);
+            return Result.all(CustomerId.customerId(request.customer()).mapError(BuyError::invalidCustomer),
+                              EventId.eventId(request.event()).mapError(BuyError::invalidEvent),
+                              SeatId.seatId(request.seat()).mapError(BuyError::invalidSeat),
+                              PriceTier.priceTier(request.tier()).mapError(BuyError::unacceptableTier))
+                         .map(ValidBuy::new)
+                         .mapError(Validation::firstFailure);
         }
 
         String eventStr() {
@@ -114,8 +135,9 @@ public interface BuyTicket {
     /// Growing-context stage: validated buy plus the authoritative price.
     record PricedBuy(ValidBuy buy, long amountMinor, String currency) {}
 
-    /// Growing-context stage: priced buy plus the claimed reservation (the design-out seat claim).
-    record ReservedBuy(PricedBuy priced, UUID reservationId) {
+    /// Growing-context stage: priced buy plus the claimed seat (the design-out seat claim). Carries
+    /// the claim identity the database returned, never one generated optimistically here.
+    record ReservedBuy(PricedBuy priced, UUID claimId) {
         ValidBuy buy() {
             return priced.buy();
         }
@@ -143,13 +165,15 @@ public interface BuyTicket {
             return reserved.currency();
         }
 
-        UUID reservationId() {
-            return reserved.reservationId();
+        UUID claimId() {
+            return reserved.claimId();
         }
     }
 
     /// Terminal buy stage: the persisted booking and ticket, ready to notify, publish and respond.
-    record Confirmation(AuthorizedBuy authorized, UUID bookingId, UUID ticketId) {
+    /// `version` is the reservation slot's sequence at the confirming transition; it stamps the
+    /// `SeatSold` fact so consumers can order it against other facts for the same seat.
+    record Confirmation(AuthorizedBuy authorized, UUID bookingId, UUID ticketId, long version) {
         Response response() {
             return new Response(bookingId.toString(),
                                 ticketId.toString(),
@@ -162,7 +186,8 @@ public interface BuyTicket {
         SeatSold fact() {
             return new SeatSold(authorized.buy().seatStr(),
                                 authorized.buy().eventStr(),
-                                bookingId.toString());
+                                bookingId.toString(),
+                                version);
         }
 
         String customerMailbox() {
@@ -229,6 +254,41 @@ public interface BuyTicket {
             }
         }
 
+        /// The operator has withheld this seat from sale (blocked or withdrawn), or event-management
+        /// could not answer. Distinct from [SeatUnavailable], which means another customer holds or
+        /// owns the seat: this one is not resolved by waiting for a hold to lapse.
+        record SeatNotSellable() implements BuyError {
+            @Override
+            public String message() {
+                return "Seat is not available for sale";
+            }
+        }
+
+        /// Client-facing validation refusal (HTTP 400): a request field could not be parsed into its
+        /// domain type. Declared in this slice's own hierarchy instead of letting the shared
+        /// value-object cause through, because the slice processor builds the router's error switch
+        /// from the `Cause` types in this package alone -- a shared cause arrives unmatched and falls
+        /// through to HTTP 500. Data-carrying, so the response names the offending field and keeps the
+        /// original reason.
+        record InvalidRequest(String field, String detail) implements BuyError {
+            @Override
+            public String message() {
+                return "Invalid request field '" + field + "': " + detail;
+            }
+        }
+
+        /// Client-facing validation refusal (HTTP 422): a request field parsed cleanly but its value
+        /// lies outside the field's admissible domain -- here, a well-formed token that names no member
+        /// of the closed `PriceTier` set. Well-formed-but-unacceptable is a semantic refusal rather than
+        /// a syntax error, which is why it earns 422 where [InvalidRequest] earns 400. It sits beside
+        /// [CustomerIneligible], the failure this slice already reports as 422.
+        record UnacceptableValue(String field, String detail) implements BuyError {
+            @Override
+            public String message() {
+                return "Unacceptable value for request field '" + field + "': " + detail;
+            }
+        }
+
         static BuyError seatUnavailable() {
             return new SeatUnavailable();
         }
@@ -256,6 +316,26 @@ public interface BuyTicket {
         static BuyError storeUnavailable() {
             return new StoreUnavailable();
         }
+
+        static BuyError seatNotSellable() {
+            return new SeatNotSellable();
+        }
+
+        static BuyError invalidCustomer(Cause cause) {
+            return new InvalidRequest("customer", cause.message());
+        }
+
+        static BuyError invalidEvent(Cause cause) {
+            return new InvalidRequest("event", cause.message());
+        }
+
+        static BuyError invalidSeat(Cause cause) {
+            return new InvalidRequest("seat", cause.message());
+        }
+
+        static BuyError unacceptableTier(Cause cause) {
+            return new UnacceptableValue("tier", cause.message());
+        }
     }
 
     // Best-effort recipient derived from the customer id (the booking domain holds no email address).
@@ -270,6 +350,7 @@ public interface BuyTicket {
                                @Notify NotificationSender notifier,
                                QuotePrice quotePrice,
                                SaleStatus saleStatus,
+                               SeatSellability seatSellability,
                                @SeatSoldPublisher Publisher<SeatSold> seatSold) {
         @SuppressWarnings("JBCT-SEQ-01")
         record buyTicket(BookingStore store,
@@ -277,6 +358,7 @@ public interface BuyTicket {
                          NotificationSender notifier,
                          QuotePrice quotePrice,
                          SaleStatus saleStatus,
+                         SeatSellability seatSellability,
                          Publisher<SeatSold> seatSold) implements BuyTicket {
             private static final String FROM_ADDRESS = "tickets@ticketing.example";
 
@@ -297,12 +379,15 @@ public interface BuyTicket {
                                .flatMap(this::confirm);
             }
 
-            // JBCT pattern: Fork-Join -- the synchronous sale-status read and the eligibility count are
-            // independent and run in parallel over the immutable ValidBuy; the join gates the saga.
+            // JBCT pattern: Fork-Join -- the two synchronous cross-slice reads (sale status, seat
+            // sellability) and the eligibility count are independent and run in parallel over the
+            // immutable ValidBuy; the join gates the saga. Sellability rides the existing fork rather
+            // than adding a serial round-trip to the hot purchase path.
             private Promise<ValidBuy> ensureSellingAndEligible(ValidBuy valid) {
-                return Promise.all(readSaleStatus(valid), countActiveBookings(valid)).flatMap((status, count) -> gate(valid,
-                                                                                                                      status,
-                                                                                                                      count));
+                return Promise.all(readSaleStatus(valid), countActiveBookings(valid), readSeatSellability(valid)).flatMap((status, count, sellability) -> gate(valid,
+                                                                                                                                                               status,
+                                                                                                                                                               count,
+                                                                                                                                                               sellability));
             }
 
             // Synchronous cross-slice read: any failure or a not-selling event surfaces as EventNotSelling.
@@ -311,16 +396,35 @@ public interface BuyTicket {
                                  .mapError(_ -> BuyError.eventNotSelling());
             }
 
+            // Synchronous cross-slice read: the `seats` table is owned by event-management, so a seat
+            // the operator has blocked or withdrawn is only visible through its slice.
+            private Promise<SeatSellability.Response> readSeatSellability(ValidBuy valid) {
+                return seatSellability.execute(new SeatSellability.Request(valid.seatStr()))
+                                      .mapError(_ -> BuyError.seatNotSellable());
+            }
+
             private Promise<Long> countActiveBookings(ValidBuy valid) {
                 return store.activeBookingCount(valid.customerUuid())
                             .mapError(_ -> BuyError.storeUnavailable());
             }
 
             // JBCT pattern: Condition -- route on the sale-status read, no transformation.
-            private Promise<ValidBuy> gate(ValidBuy valid, SaleStatus.Response status, long count) {
+            private Promise<ValidBuy> gate(ValidBuy valid,
+                                           SaleStatus.Response status,
+                                           long count,
+                                           SeatSellability.Response sellability) {
                 return status.onSale()
-                       ? eligibilityGate(valid, count)
+                       ? sellabilityGate(valid, count, sellability)
                        : BuyError.eventNotSelling().promise();
+            }
+
+            // JBCT pattern: Condition -- route on seat sellability, no transformation.
+            private Promise<ValidBuy> sellabilityGate(ValidBuy valid,
+                                                      long count,
+                                                      SeatSellability.Response sellability) {
+                return sellability.sellable()
+                       ? eligibilityGate(valid, count)
+                       : BuyError.seatNotSellable().promise();
             }
 
             // JBCT pattern: Condition -- route on eligibility, no transformation.
@@ -341,16 +445,16 @@ public interface BuyTicket {
             }
 
             // JBCT pattern: Leaf -- design-out seat claim; an empty projection means the seat is taken.
+            // The claim identity comes back from the database, so the saga can only ever act on the
+            // claim it actually won.
             private Promise<ReservedBuy> reserve(PricedBuy priced) {
-                var reservationId = UUID.randomUUID();
-
-                return store.claimSeat(reservationId,
-                                       priced.buy().seatUuid(),
+                return store.claimSeat(priced.buy().seatUuid(),
                                        priced.buy().eventUuid(),
                                        priced.buy().customerUuid())
                             .mapError(_ -> BuyError.storeUnavailable())
                             .flatMap(claimed -> claimed.async(BuyError.seatUnavailable()))
-                            .map(_ -> new ReservedBuy(priced, reservationId));
+                            .map(claim -> new ReservedBuy(priced,
+                                                          claim.claimId()));
             }
 
             // JBCT pattern: Aspects -- wrap the authorization in BER compensation; any failure releases
@@ -379,21 +483,35 @@ public interface BuyTicket {
                        : BuyError.paymentDeclined().promise();
             }
 
+            // The gateway approved, so money is captured from here on. If the receipt cannot be
+            // parsed we hold no usable handle for the payment, but we do hold the raw one the gateway
+            // sent -- void with that before failing, or the customer is charged for nothing.
             private Promise<AuthorizedBuy> acceptAuthorization(ReservedBuy reserved, AuthResult result) {
                 return ReceiptId.receiptId(result.receiptId())
                                 .mapError(_ -> BuyError.paymentProviderUnavailable())
                                 .map(receipt -> new AuthorizedBuy(reserved,
                                                                   receipt.value().value()))
-                                .async();
+                                .async()
+                                .fold(parsed -> voidUnusableAuthorization(result, parsed));
+            }
+
+            private Promise<AuthorizedBuy> voidUnusableAuthorization(AuthResult result, Result<AuthorizedBuy> parsed) {
+                return parsed.fold(cause -> voidRawThenFail(result.receiptId(), cause), Promise::success);
+            }
+
+            private Promise<AuthorizedBuy> voidRawThenFail(String receiptId, Cause cause) {
+                return voidReceipt(receiptId).flatMap(_ -> cause.promise());
             }
 
             // BER compensation for the authorize step: release the reservation, then re-raise the cause.
+            // Any authorization that got as far as producing a receipt is voided by the step that
+            // produced it, so this compensation owns only the reservation it created.
             private Promise<AuthorizedBuy> compensateAuthFailure(ReservedBuy reserved, Result<AuthorizedBuy> result) {
                 return result.fold(cause -> releaseThenFail(reserved, cause), Promise::success);
             }
 
             private Promise<AuthorizedBuy> releaseThenFail(ReservedBuy reserved, Cause cause) {
-                return store.releaseReservation(reserved.reservationId())
+                return store.releaseReservation(reserved.claimId())
                             .fold(_ -> cause.promise());
             }
 
@@ -407,11 +525,25 @@ public interface BuyTicket {
                 var bookingId = BookingId.bookingId().value().value();
                 var ticketId = TicketId.ticketId().value().value();
 
-                return store.confirmReservation(authorized.reservationId())
+                return store.confirmReservation(authorized.claimId())
                             .mapError(_ -> BuyError.storeUnavailable())
                             .flatMap(confirmed -> confirmed.async(BuyError.seatUnavailable()))
-                            .flatMap(_ -> insertRecords(authorized, bookingId, ticketId))
-                            .map(_ -> new Confirmation(authorized, bookingId, ticketId));
+                            .flatMap(claim -> issueUnder(authorized,
+                                                         bookingId,
+                                                         ticketId,
+                                                         claim.version()));
+            }
+
+            /// The confirming transition's version is the seat's position in its own sequence, so the
+            /// `SeatSold` fact published downstream can be ordered against every other fact for that seat.
+            private Promise<Confirmation> issueUnder(AuthorizedBuy authorized,
+                                                     UUID bookingId,
+                                                     UUID ticketId,
+                                                     long version) {
+                return insertRecords(authorized, bookingId, ticketId).map(_ -> new Confirmation(authorized,
+                                                                                                bookingId,
+                                                                                                ticketId,
+                                                                                                version));
             }
 
             // JBCT pattern: Sequencer -- insert ticket, then payment, then the BOOKINGS row LAST. The
@@ -433,7 +565,7 @@ public interface BuyTicket {
                                                               authorized.amountMinor(),
                                                               authorized.currency()))
                             .flatMap(_ -> store.insertBooking(bookingId,
-                                                              authorized.reservationId(),
+                                                              authorized.claimId(),
                                                               authorized.buy().seatUuid(),
                                                               authorized.buy().eventUuid(),
                                                               authorized.buy().customerUuid(),
@@ -449,14 +581,18 @@ public interface BuyTicket {
             }
 
             private Promise<Confirmation> voidAndRelease(AuthorizedBuy authorized, Cause cause) {
-                return voidAuthorization(authorized).flatMap(_ -> store.releaseReservation(authorized.reservationId()))
+                return voidAuthorization(authorized).flatMap(_ -> store.releaseReservation(authorized.claimId()))
                                         .fold(_ -> cause.promise());
             }
 
             // Best-effort gateway void (recovered to Unit); the saga re-raises the original cause anyway.
             private Promise<Unit> voidAuthorization(AuthorizedBuy authorized) {
+                return voidReceipt(authorized.receiptId().toString());
+            }
+
+            private Promise<Unit> voidReceipt(String receiptId) {
                 return gateway.postJson("/void",
-                                        new VoidRequest(authorized.receiptId().toString()),
+                                        new VoidRequest(receiptId),
                                         VoidResult.class)
                               .mapToUnit()
                               .recover(_ -> Unit.unit());
@@ -481,12 +617,19 @@ public interface BuyTicket {
                                                 NotificationBody.Text.text(confirmation.emailBody()));
             }
 
+            // FER: the buy is already committed and irreversible by the time the fact is published, so
+            // a publish failure is swallowed rather than reported to a buyer who has been charged and
+            // holds a valid ticket. Guarantee earned: the response is truthful about the purchase, not
+            // about the fact. Mechanism: a single attempt -- there is no retry and no outbox, so a lost
+            // SeatSold leaves the availability and pricing projections stale for that seat until the
+            // next fact about it, or an operator re-drive.
             private Promise<Response> publishSold(Confirmation confirmation) {
                 return seatSold.publish(confirmation.fact())
+                               .recover(_ -> Unit.unit())
                                .map(_ -> confirmation.response());
             }
         }
 
-        return new buyTicket(store, gateway, notifier, quotePrice, saleStatus, seatSold);
+        return new buyTicket(store, gateway, notifier, quotePrice, saleStatus, seatSellability, seatSold);
     }
 }

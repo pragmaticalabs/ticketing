@@ -10,12 +10,14 @@ import org.pragmatica.example.ticketing.booking.BookingStore.HoldRow;
 import org.pragmatica.example.ticketing.shared.SeatId;
 
 
-/// Use case: report the decay state of a seat's hold (FRESH / STALE / EXPIRED / NONE). Telescope
-/// leaf -- system `ticketing` -> subsystem `booking` -> workflow `hold` -> use case `check-hold`.
-/// One use case, one `Request`/`Response` pair, one `execute` method.
+/// Use case: report the decay state of a seat's hold (FRESH / STALE / EXPIRED / SOLD / NONE).
+/// Telescope leaf -- system `ticketing` -> subsystem `booking` -> workflow `hold` -> use case
+/// `check-hold`. One use case, one `Request`/`Response` pair, one `execute` method.
 ///
-/// Recovery class: **FER** -- the hold decays with time; the read maps the persisted state plus the
-/// time-as-decay flags to a single label.
+/// Recovery class: **FER** -- the hold decays with time. The label is decided by the persisted state
+/// first and only then by the time-as-decay flags, because those flags describe a live hold and
+/// nothing else: a sold seat reads SOLD, a cancelled reservation reads NONE however much TTL it
+/// still carries, and a seat with no reservation at all reads NONE.
 @Slice
 public interface CheckHold {
     record Request(String seat) {}
@@ -32,8 +34,25 @@ public interface CheckHold {
             }
         }
 
+        /// Client-facing validation refusal (HTTP 400): a request field could not be parsed into its
+        /// domain type. Declared in this slice's own hierarchy instead of letting the shared
+        /// value-object cause through, because the slice processor builds the router's error switch
+        /// from the `Cause` types in this package alone -- a shared cause arrives unmatched and falls
+        /// through to HTTP 500. Data-carrying, so the response names the offending field and keeps the
+        /// original reason.
+        record InvalidRequest(String field, String detail) implements CheckError {
+            @Override
+            public String message() {
+                return "Invalid request field '" + field + "': " + detail;
+            }
+        }
+
         static CheckError storeUnavailable() {
             return new StoreUnavailable();
+        }
+
+        static CheckError invalidSeat(Cause cause) {
+            return new InvalidRequest("seat", cause.message());
         }
     }
 
@@ -45,6 +64,7 @@ public interface CheckHold {
             @Override
             public Promise<Response> execute(Request request) {
                 return SeatId.seatId(request.seat())
+                             .mapError(CheckError::invalidSeat)
                              .async()
                              .flatMap(this::loadHoldState);
             }
@@ -64,7 +84,19 @@ public interface CheckHold {
                             .or("NONE");
             }
 
+            // The decay flags describe a live hold and nothing else, so the persisted state decides
+            // first: a sold seat has no hold to decay (and no expiry at all), and a cancelled or
+            // expired reservation leaves the seat free regardless of the TTL it happens to carry.
             private String classify(HoldRow row) {
+                return switch (row.state()) {
+                    case "held" -> decayLabel(row);
+                    case "confirmed" -> "SOLD";
+                    case "expired" -> "EXPIRED";
+                    default -> "NONE";
+                };
+            }
+
+            private String decayLabel(HoldRow row) {
                 return row.expired()
                        ? "EXPIRED"
                        : staleOrFresh(row);

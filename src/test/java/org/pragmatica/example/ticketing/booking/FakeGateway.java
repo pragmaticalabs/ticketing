@@ -21,18 +21,33 @@ import org.pragmatica.example.ticketing.booking.purchase.buyticket.BuyTicket;
 /// Shared fake payment gateway for the booking slice tests: the slices only use
 /// `postJson(url, body, Class)`. Authorize approval is configurable; void/refund succeed unless their
 /// URL is listed in `failUrls`, which lets a test drive a hard provider/refund failure (as opposed to
-/// a soft decline). Every `postJson` URL is appended to `calls`, so a test can assert that, e.g., the
-/// authorization was VOIDED during BER compensation. The rest of the HttpClient surface is unused.
+/// a soft decline). `receipt` overrides the receipt id an approved authorization returns, so a test
+/// can drive an approval whose receipt the slice cannot parse. Every `postJson` URL is appended to
+/// `calls`, so a test can assert that, e.g., the authorization was VOIDED during BER compensation, or
+/// that a re-driven cancellation refunded exactly once. The rest of the HttpClient surface is unused.
 /// Public so the deep-package slice tests can reuse it.
-public record FakeGateway(boolean approved, Set<String> failUrls, List<String> calls) implements HttpClient {
+public record FakeGateway(boolean approved, Set<String> failUrls, List<String> calls, Option<String> receipt) implements HttpClient {
     public FakeGateway(boolean approved) {
-        this(approved, Set.of(), new ArrayList<>());
+        this(approved, Set.of(), new ArrayList<>(), Option.empty());
     }
 
     /// A gateway that approves authorizations but fails the given URL hard (mapped to the slice's
     /// provider/refund-unavailable failure).
     public static FakeGateway failing(String url) {
-        return new FakeGateway(true, Set.of(url), new ArrayList<>());
+        return new FakeGateway(true, Set.of(url), new ArrayList<>(), Option.empty());
+    }
+
+    /// A gateway that approves the authorization but returns the given receipt id -- used to drive an
+    /// approved payment whose receipt the slice cannot parse.
+    public static FakeGateway approvingWith(String receipt) {
+        return new FakeGateway(true, Set.of(), new ArrayList<>(), Option.present(receipt));
+    }
+
+    /// How many times the given URL was posted to.
+    public long callCount(String url) {
+        return calls.stream()
+                    .filter(url::equals)
+                    .count();
     }
 
     @Override
@@ -44,14 +59,17 @@ public record FakeGateway(boolean approved, Set<String> failUrls, List<String> c
         }
 
         Promise<?> response = switch (url) {
-            case "/authorize" -> Promise.success(new BuyTicket.AuthResult(approved,
-                                                                          UUID.randomUUID().toString()));
+            case "/authorize" -> Promise.success(new BuyTicket.AuthResult(approved, receiptId()));
             case "/void" -> Promise.success(new BuyTicket.VoidResult("voided"));
             case "/refund" -> Promise.success(new CancelTicket.RefundResult(UUID.randomUUID().toString()));
             default -> unused();
         };
 
         return (Promise<T>) response;
+    }
+
+    private String receiptId() {
+        return receipt.or(() -> UUID.randomUUID().toString());
     }
 
     @Override

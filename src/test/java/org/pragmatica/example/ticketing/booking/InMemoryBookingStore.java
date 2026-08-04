@@ -1,26 +1,49 @@
 package org.pragmatica.example.ticketing.booking;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 import org.pragmatica.lang.Option;
 import org.pragmatica.lang.Promise;
 import org.pragmatica.lang.Unit;
 
+import org.junit.jupiter.api.Assertions;
 
-/// Shared in-memory fake of the @PgSql {@link BookingStore}, used by every booking slice test. The
-/// seat claim refuses while a held/confirmed reservation is active (design-out), and lifecycle
-/// updates are guarded exactly like the SQL `... WHERE state = ...`. Public (and non-final so the
-/// failure-injecting {@link FailingBookingStore} can subclass it) so the deep-package slice tests can
-/// reuse it.
+
+/// Shared in-memory fake of the @PgSql {@link BookingStore}, used by every booking slice test.
 ///
-/// The real SQL derives the `expired`/`stale` decay flags from `expires_at` relative to `now()`; this
-/// fake has no clock, so hold decay is an injectable property (default {@link Decay#FRESH}) set via
-/// {@link #withDecay(Decay)} -- letting a test deterministically read back a FRESH, STALE or EXPIRED
-/// hold without sleeping.
+/// This fake is a **faithful model of the schema**, not a convenience map: it reproduces the
+/// constraints Postgres would enforce, so a defect the real database would surface cannot pass here.
+/// Specifically it models
+///   - the design-out serialization point: reservations are keyed by seat, exactly as `seat_id` is
+///     the primary key, so a seat can never acquire a second reservation row;
+///   - **key immutability**: the key is the seat and is never rewritten; only the non-key `claim_id`
+///     rotates, and it rotates on every successful claim, so a stale claim handle stops matching;
+///   - the claim guard verbatim (`state IN ('cancelled','expired')`, an expired hold, or the same
+///     customer's live hold) -- an out-of-state claim yields an empty projection;
+///   - every guarded lifecycle `UPDATE ... WHERE ...` (an out-of-state or stale-claim row yields
+///     empty rather than mutating);
+///   - NULL semantics: `expires_at` exists only while a hold is live, and the COALESCE in the decay
+///     query turns its absence into "no decay" rather than a NULL bound to a primitive;
+///   - the per-seat `version` counter (V008): the reservation row is the one serialization point every
+///     seat transition passes through, so the counter is monotonic per seat. It starts at 0 on a fresh
+///     insert and is bumped by EVERY state-changing statement -- claim-by-conflict, confirm, release,
+///     cancel-by-seat, expire and orphan-reap alike -- and the bumped value is what
+///     `ClaimRef`/`SeatRef` return, exactly as the real `RETURNING ... version` does. Publishers stamp
+///     facts with it, so a fake that skipped a bump would silently make an unordered fact stream look
+///     ordered.
+///
+/// The real SQL derives the `expired`/`stale` decay flags from `expires_at` relative to `now()` and
+/// reaps orphaned confirmations by `created_at` age; this fake has no clock, so both are injectable
+/// properties -- {@link #withDecay(Decay)} (default {@link Decay#FRESH}) and
+/// {@link #withAgedClaims()} (default: claims are recent). They model two different SQL time
+/// predicates and are therefore independent knobs.
+///
+/// Public (and non-final so the failure-injecting {@link FailingBookingStore} can subclass it) so the
+/// deep-package slice tests can reuse it.
 public class InMemoryBookingStore implements BookingStore {
     /// Injectable hold-decay state, mapping a label to the SQL-equivalent (expired, stale) flag pair.
     /// EXPIRED is also stale, matching `expires_at < now()` implying `expires_at < now() + 5 minutes`.
@@ -42,58 +65,94 @@ public class InMemoryBookingStore implements BookingStore {
         }
     }
 
-    private record StoredReservation(UUID id, UUID seatId, UUID eventId, UUID customerId, String state) {}
+    /// A reservation row, keyed by seat. `claimId` is the rotating non-key identity; `hasExpiry`
+    /// models `expires_at IS NOT NULL`, which holds only while a hold is live or has just lapsed;
+    /// `version` is the per-seat sequence bumped by every state-changing statement.
+    private record StoredReservation(UUID seatId,
+                                     UUID claimId,
+                                     UUID eventId,
+                                     UUID customerId,
+                                     String state,
+                                     boolean hasExpiry,
+                                     long version) {}
 
-    private record StoredBooking(UUID id, UUID seatId, UUID eventId, UUID customerId, String status, UUID ticketId) {}
+    private record StoredBooking(UUID id,
+                                 UUID reservationClaimId,
+                                 UUID seatId,
+                                 UUID eventId,
+                                 UUID customerId,
+                                 String status,
+                                 UUID ticketId) {}
+
+    private record StoredPayment(UUID id, UUID bookingId, String status, Option<UUID> receiptId) {}
 
     private final Map<UUID, StoredReservation> reservationsBySeat = new HashMap<>();
     private final Map<UUID, StoredBooking> bookings = new HashMap<>();
     private final Map<UUID, String> tickets = new HashMap<>();
-    private final Map<UUID, String> payments = new HashMap<>();
-
+    private final Map<UUID, StoredPayment> payments = new HashMap<>();
     private Decay decay = Decay.FRESH;
 
-    /// Set the decay state reported by {@link #holdDecay(UUID)}; fluent so a store can be built inline.
+    private boolean agedClaims;
+
+    /// Set the decay state reported by {@link #holdDecay(UUID)} and used by the claim guard and the
+    /// expiry sweep; fluent so a store can be built inline.
     public InMemoryBookingStore withDecay(Decay decay) {
         this.decay = decay;
 
         return this;
     }
 
-    @Override
-    public Promise<Option<RowId>> claimSeat(UUID id, UUID seatId, UUID eventId, UUID customerId) {
-        var existing = reservationsBySeat.get(seatId);
+    /// Treat every stored claim as older than the orphan-reap age bound; fluent.
+    public InMemoryBookingStore withAgedClaims() {
+        this.agedClaims = true;
 
-        if (existing != null && (existing.state().equals("held") || existing.state().equals("confirmed"))) {
-            return Promise.success(Option.empty());
-        }
+        return this;
+    }
 
-        reservationsBySeat.put(seatId, new StoredReservation(id, seatId, eventId, customerId, "held"));
+    /// Seed a held reservation the way a slice would, returning the claim identity the store
+    /// generated. Kept here (rather than in each test) so the tests are insulated from the store's
+    /// claim signature.
+    public UUID seedHold(UUID seatId, UUID eventId, UUID customerId) {
+        return claimSeat(seatId, eventId, customerId).await()
+                        .onFailure(cause -> Assertions.fail(cause.message()))
+                        .or(Option.<ClaimRef> empty())
+                        .map(ClaimRef::claimId)
+                        .or(() -> Assertions.fail("Seat claim was refused"));
+    }
 
-        return Promise.success(Option.present(new RowId(id)));
+    /// Seed a confirmed reservation with no booking row -- the state a crash between
+    /// `confirmReservation` and `insertBooking` leaves behind.
+    public UUID seedConfirmedReservation(UUID seatId, UUID eventId, UUID customerId) {
+        var claimId = seedHold(seatId, eventId, customerId);
+
+        confirmReservation(claimId).await().onFailure(cause -> Assertions.fail(cause.message()));
+
+        return claimId;
     }
 
     @Override
-    public Promise<Option<RowId>> confirmReservation(UUID id) {
-        return transitionReservationById(id, "held", "confirmed");
+    public Promise<Option<ClaimRef>> claimSeat(UUID seatId, UUID eventId, UUID customerId) {
+        return Option.option(reservationsBySeat.get(seatId))
+                     .map(existing -> reclaim(existing, eventId, customerId))
+                     .or(() -> writeClaim(seatId, eventId, customerId, 0L));
     }
 
     @Override
-    public Promise<Option<RowId>> releaseReservation(UUID id) {
-        return forceReservationById(id, "cancelled");
+    public Promise<Option<ClaimRef>> confirmReservation(UUID claimId) {
+        return transitionByClaim(claimId, "held", "confirmed", false);
     }
 
     @Override
-    public Promise<Option<RowId>> cancelReservationBySeat(UUID seatId) {
-        var existing = reservationsBySeat.get(seatId);
+    public Promise<Option<ClaimRef>> releaseReservation(UUID claimId) {
+        return findReservationByClaim(claimId).map(reservation -> writeState(reservation, "cancelled", false))
+                                     .or(() -> Promise.success(Option.empty()));
+    }
 
-        if (existing == null || !existing.state().equals("confirmed")) {
-            return Promise.success(Option.empty());
-        }
-
-        reservationsBySeat.put(seatId, withState(existing, "cancelled"));
-
-        return Promise.success(Option.present(new RowId(existing.id())));
+    @Override
+    public Promise<Option<ClaimRef>> cancelReservationBySeat(UUID seatId) {
+        return Option.option(reservationsBySeat.get(seatId))
+                     .map(existing -> applyTransition(existing, "confirmed", "cancelled", false))
+                     .or(() -> Promise.success(Option.empty()));
     }
 
     @Override
@@ -109,12 +168,12 @@ public class InMemoryBookingStore implements BookingStore {
 
     @Override
     public Promise<Unit> insertBooking(UUID id,
-                                       UUID reservationId,
+                                       UUID reservationClaimId,
                                        UUID seatId,
                                        UUID eventId,
                                        UUID customerId,
                                        UUID ticketId) {
-        bookings.put(id, new StoredBooking(id, seatId, eventId, customerId, "confirmed", ticketId));
+        bookings.put(id, new StoredBooking(id, reservationClaimId, seatId, eventId, customerId, "confirmed", ticketId));
 
         return Promise.UNIT;
     }
@@ -126,7 +185,7 @@ public class InMemoryBookingStore implements BookingStore {
                                        UUID receiptId,
                                        long amountMinor,
                                        String currency) {
-        payments.put(id, status);
+        payments.put(id, new StoredPayment(id, bookingId, status, Option.option(receiptId)));
 
         return Promise.UNIT;
     }
@@ -149,15 +208,9 @@ public class InMemoryBookingStore implements BookingStore {
 
     @Override
     public Promise<Option<RowId>> cancelBooking(UUID id) {
-        var existing = bookings.get(id);
-
-        if (existing == null || !existing.status().equals("confirmed")) {
-            return Promise.success(Option.empty());
-        }
-
-        bookings.put(id, withStatus(existing, "cancelled"));
-
-        return Promise.success(Option.present(new RowId(id)));
+        return Option.option(bookings.get(id))
+                     .map(this::applyBookingCancel)
+                     .or(() -> Promise.success(Option.empty()));
     }
 
     @Override
@@ -168,27 +221,34 @@ public class InMemoryBookingStore implements BookingStore {
     }
 
     @Override
+    public Promise<Option<ReceiptRef>> findRefund(UUID bookingId) {
+        return Promise.success(refundedPayment(bookingId).flatMap(StoredPayment::receiptId).map(ReceiptRef::new));
+    }
+
+    @Override
+    public Promise<Unit> markRefunded(UUID receiptId, UUID bookingId) {
+        authorizedPayment(bookingId).onPresent(payment -> payments.put(payment.id(), refunded(payment, receiptId)));
+
+        return Promise.UNIT;
+    }
+
+    /// Models `SELECT state, COALESCE(expires_at < now(), FALSE) AS expired, ...`: a reservation with
+    /// no expiry yields no decay, and the caller decides by `state` whether the flags mean anything.
+    @Override
     public Promise<Option<HoldRow>> holdDecay(UUID seatId) {
         return Promise.success(Option.option(reservationsBySeat.get(seatId)).map(reservation -> new HoldRow(reservation.state(),
-                                                                                                            decay.expired(),
-                                                                                                            decay.stale())));
+                                                                                                            expiredFlag(reservation),
+                                                                                                            staleFlag(reservation))));
     }
 
     @Override
     public Promise<List<SeatRef>> expireHolds() {
-        var freed = new ArrayList<SeatRef>();
+        return Promise.success(reapAll(expiredHolds(), "expired", true));
+    }
 
-        reservationsBySeat.values()
-                          .stream()
-                          .filter(reservation -> reservation.state()
-                                                            .equals("held"))
-                          .forEach(reservation -> freed.add(new SeatRef(reservation.seatId(),
-                                                                        reservation.eventId())));
-        freed.forEach(seat -> reservationsBySeat.put(seat.seatId(),
-                                                     withState(reservationsBySeat.get(seat.seatId()),
-                                                               "expired")));
-
-        return Promise.success(List.copyOf(freed));
+    @Override
+    public Promise<List<SeatRef>> expireOrphanedConfirmations() {
+        return Promise.success(reapAll(orphanedConfirmations(), "cancelled", false));
     }
 
     public String reservationStateBySeat(UUID seatId) {
@@ -196,63 +256,227 @@ public class InMemoryBookingStore implements BookingStore {
                                  .state();
     }
 
-    private Promise<Option<RowId>> transitionReservationById(UUID id, String from, String to) {
-        return reservationsBySeat.entrySet()
+    public UUID claimIdBySeat(UUID seatId) {
+        return reservationsBySeat.get(seatId)
+                                 .claimId();
+    }
+
+    /// The per-seat version counter, for assertions that it advances on every transition.
+    public long reservationVersionBySeat(UUID seatId) {
+        return reservationsBySeat.get(seatId)
+                                 .version();
+    }
+
+    public String bookingStatus(UUID bookingId) {
+        return bookings.get(bookingId)
+                       .status();
+    }
+
+    public String ticketStatus(UUID ticketId) {
+        return tickets.get(ticketId);
+    }
+
+    /// Status of the payment recorded for a booking, or "none" when no payment row exists.
+    public String paymentStatus(UUID bookingId) {
+        return payments.values()
+                       .stream()
+                       .filter(payment -> payment.bookingId()
+                                                 .equals(bookingId))
+                       .map(StoredPayment::status)
+                       .findFirst()
+                       .orElse("none");
+    }
+
+    /// Models the reap statements' `SET state = ..., version = version + 1 RETURNING seat_id, event_id,
+    /// version`: each reaped row is bumped and reports the version of the transition that freed it, so
+    /// the published fact carries the position the reap occupies in that seat's sequence.
+    private List<SeatRef> reapAll(List<StoredReservation> matched, String state, boolean keepExpiry) {
+        return matched.stream()
+                      .map(reservation -> reap(reservation, state, keepExpiry))
+                      .toList();
+    }
+
+    private SeatRef reap(StoredReservation reservation, String state, boolean keepExpiry) {
+        var reaped = withState(reservation, state, keepExpiry && reservation.hasExpiry());
+
+        reservationsBySeat.put(reaped.seatId(), reaped);
+
+        return new SeatRef(reaped.seatId(), reaped.eventId(), reaped.version());
+    }
+
+    private List<StoredReservation> expiredHolds() {
+        return matching(this::expiredHold);
+    }
+
+    private List<StoredReservation> orphanedConfirmations() {
+        return matching(this::orphanedConfirmation);
+    }
+
+    /// Materialised before any row is rewritten, exactly as the real single-statement `UPDATE ... WHERE`
+    /// selects its target set once.
+    private List<StoredReservation> matching(Predicate<StoredReservation> predicate) {
+        return reservationsBySeat.values()
                                  .stream()
-                                 .filter(entry -> entry.getValue()
-                                                       .id()
-                                                       .equals(id))
-                                 .findFirst()
-                                 .map(entry -> applyTransition(entry.getKey(),
-                                                               entry.getValue(),
-                                                               from,
-                                                               to))
-                                 .orElseGet(() -> Promise.success(Option.empty()));
+                                 .filter(predicate)
+                                 .toList();
     }
 
-    private Promise<Option<RowId>> applyTransition(UUID seatId, StoredReservation reservation, String from, String to) {
-        if (!reservation.state().equals(from)) {
-            return Promise.success(Option.empty());
-        }
-
-        reservationsBySeat.put(seatId, withState(reservation, to));
-
-        return Promise.success(Option.present(new RowId(reservation.id())));
+    private boolean expiredHold(StoredReservation reservation) {
+        return reservation.state()
+                          .equals("held") && decay.expired();
     }
 
-    private Promise<Option<RowId>> forceReservationById(UUID id, String to) {
-        return reservationsBySeat.entrySet()
-                                 .stream()
-                                 .filter(entry -> entry.getValue()
-                                                       .id()
-                                                       .equals(id))
-                                 .findFirst()
-                                 .map(entry -> force(entry.getKey(),
-                                                     entry.getValue(),
-                                                     to))
-                                 .orElseGet(() -> Promise.success(Option.empty()));
+    /// `state = 'confirmed' AND created_at < now() - interval '1 hour' AND claim_id NOT IN (confirmed
+    /// bookings' claims)`.
+    private boolean orphanedConfirmation(StoredReservation reservation) {
+        return reservation.state()
+                          .equals("confirmed")
+               && agedClaims
+               && !soldUnderClaim(reservation.claimId());
     }
 
-    private Promise<Option<RowId>> force(UUID seatId, StoredReservation reservation, String to) {
-        reservationsBySeat.put(seatId, withState(reservation, to));
-
-        return Promise.success(Option.present(new RowId(reservation.id())));
+    private boolean soldUnderClaim(UUID claimId) {
+        return bookings.values()
+                       .stream()
+                       .filter(booking -> booking.status()
+                                                 .equals("confirmed"))
+                       .anyMatch(booking -> booking.reservationClaimId()
+                                                   .equals(claimId));
     }
 
-    private StoredReservation withState(StoredReservation reservation, String state) {
-        return new StoredReservation(reservation.id(),
-                                     reservation.seatId(),
+    private boolean expiredFlag(StoredReservation reservation) {
+        return reservation.hasExpiry() && (reservation.state()
+                                                      .equals("expired") || decay.expired());
+    }
+
+    private boolean staleFlag(StoredReservation reservation) {
+        return reservation.hasExpiry() && (reservation.state()
+                                                      .equals("expired") || decay.stale());
+    }
+
+    private Option<StoredPayment> refundedPayment(UUID bookingId) {
+        return paymentFor(bookingId, "refunded");
+    }
+
+    private Option<StoredPayment> authorizedPayment(UUID bookingId) {
+        return paymentFor(bookingId, "authorized");
+    }
+
+    private Option<StoredPayment> paymentFor(UUID bookingId, String status) {
+        return Option.from(payments.values()
+                                   .stream()
+                                   .filter(payment -> payment.bookingId()
+                                                             .equals(bookingId))
+                                   .filter(payment -> payment.status()
+                                                             .equals(status))
+                                   .findFirst());
+    }
+
+    private StoredPayment refunded(StoredPayment payment, UUID receiptId) {
+        return new StoredPayment(payment.id(), payment.bookingId(), "refunded", Option.present(receiptId));
+    }
+
+    /// A claim always writes a FRESH claim identity; the seat key itself is never rewritten. The
+    /// version is supplied by the caller: 0 for the plain INSERT, `reservations.version + 1` for the
+    /// ON CONFLICT branch.
+    private Promise<Option<ClaimRef>> writeClaim(UUID seatId, UUID eventId, UUID customerId, long version) {
+        var claimId = UUID.randomUUID();
+
+        reservationsBySeat.put(seatId,
+                               new StoredReservation(seatId, claimId, eventId, customerId, "held", true, version));
+
+        return claimed(claimId, version);
+    }
+
+    private Promise<Option<ClaimRef>> reclaim(StoredReservation existing, UUID eventId, UUID customerId) {
+        return claimable(existing, customerId)
+               ? writeClaim(existing.seatId(), eventId, customerId, existing.version() + 1)
+               : Promise.success(Option.empty());
+    }
+
+    /// The claim guard verbatim: a cancelled or expired reservation, a hold past its TTL, or the same
+    /// customer's own live hold. Never a confirmed sale, never another customer's live hold.
+    private boolean claimable(StoredReservation existing, UUID customerId) {
+        return existing.state()
+                       .equals("cancelled") || existing.state()
+                                                       .equals("expired") || expiredHold(existing) || ownLiveHold(existing,
+                                                                                                                  customerId);
+    }
+
+    private boolean ownLiveHold(StoredReservation existing, UUID customerId) {
+        return existing.state()
+                       .equals("held") && existing.customerId()
+                                                  .equals(customerId);
+    }
+
+    private Promise<Option<RowId>> applyBookingCancel(StoredBooking existing) {
+        return existing.status()
+                       .equals("confirmed")
+               ? cancelBookingRow(existing)
+               : Promise.success(Option.empty());
+    }
+
+    private Promise<Option<RowId>> cancelBookingRow(StoredBooking existing) {
+        bookings.put(existing.id(), withStatus(existing, "cancelled"));
+
+        return Promise.success(Option.present(new RowId(existing.id())));
+    }
+
+    private Promise<Option<ClaimRef>> transitionByClaim(UUID claimId, String from, String to, boolean hasExpiry) {
+        return findReservationByClaim(claimId).map(reservation -> applyTransition(reservation, from, to, hasExpiry))
+                                     .or(() -> Promise.success(Option.empty()));
+    }
+
+    private Promise<Option<ClaimRef>> applyTransition(StoredReservation reservation,
+                                                      String from,
+                                                      String to,
+                                                      boolean hasExpiry) {
+        return reservation.state()
+                          .equals(from)
+               ? writeState(reservation, to, hasExpiry)
+               : Promise.success(Option.empty());
+    }
+
+    private Promise<Option<ClaimRef>> writeState(StoredReservation reservation, String to, boolean hasExpiry) {
+        var written = withState(reservation, to, hasExpiry);
+
+        reservationsBySeat.put(written.seatId(), written);
+
+        return claimed(written.claimId(), written.version());
+    }
+
+    private Option<StoredReservation> findReservationByClaim(UUID claimId) {
+        return Option.option(reservationsBySeat.values()
+                                               .stream()
+                                               .filter(reservation -> reservation.claimId()
+                                                                                 .equals(claimId))
+                                               .findFirst()
+                                               .orElse(null));
+    }
+
+    /// The single place a stored row changes state, so `version = version + 1` here is what makes the
+    /// counter monotonic across every transition without any caller having to remember to bump it.
+    private StoredReservation withState(StoredReservation reservation, String state, boolean hasExpiry) {
+        return new StoredReservation(reservation.seatId(),
+                                     reservation.claimId(),
                                      reservation.eventId(),
                                      reservation.customerId(),
-                                     state);
+                                     state,
+                                     hasExpiry,
+                                     reservation.version() + 1);
     }
 
     private StoredBooking withStatus(StoredBooking booking, String status) {
         return new StoredBooking(booking.id(),
+                                 booking.reservationClaimId(),
                                  booking.seatId(),
                                  booking.eventId(),
                                  booking.customerId(),
                                  status,
                                  booking.ticketId());
+    }
+
+    private static Promise<Option<ClaimRef>> claimed(UUID claimId, long version) {
+        return Promise.success(Option.present(new ClaimRef(claimId, version)));
     }
 }
