@@ -84,4 +84,20 @@ class QuoteForCustomerTest {
                .onSuccess(r -> fail("Expected store failure"))
                .onFailure(cause -> assertThat(cause).isInstanceOf(QuoteForCustomer.QuoteError.StoreUnavailable.class));
     }
+
+    /// See BuyTicketTest for why this contract exists.
+    @Test
+    void validQuery_malformedEvent_returnsSliceLocalInvalidRequest() {
+        QuoteForCustomer.ValidQuery.validQuery(new QuoteForCustomer.Request("not-a-uuid", "STANDARD"))
+                                   .onSuccess(_ -> fail("Expected validation to fail"))
+                                   .onFailure(cause -> assertThat(cause).isInstanceOf(QuoteForCustomer.QuoteError.InvalidRequest.class));
+    }
+
+    @Test
+    void validQuery_multipleInvalidFields_returnsSliceLocalCauseNotComposite() {
+        QuoteForCustomer.ValidQuery.validQuery(new QuoteForCustomer.Request("not-a-uuid", "NO_SUCH_TIER"))
+                                   .onSuccess(_ -> fail("Expected validation to fail"))
+                                   .onFailure(cause -> assertThat(cause.getClass().getName()).doesNotContain("org.pragmatica.example.ticketing.shared.")
+                                                                 .doesNotContain("Composite"));
+    }
 }

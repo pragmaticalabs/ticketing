@@ -33,6 +33,7 @@ public interface ProjectPrice {
         }
     }
 
+    @ProjectPriceLog
     @PriceChangedSubscription
     Promise<Unit> execute(PriceChanged event);
 
