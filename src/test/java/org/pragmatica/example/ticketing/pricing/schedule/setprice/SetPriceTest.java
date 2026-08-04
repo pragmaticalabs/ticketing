@@ -157,4 +157,20 @@ class SetPriceTest {
                .onSuccess(r -> fail("Expected store failure"))
                .onFailure(cause -> assertThat(cause).isInstanceOf(SetPrice.PricingError.StoreUnavailable.class));
     }
+
+    /// See BuyTicketTest for why this contract exists.
+    @Test
+    void validWrite_malformedEvent_returnsSliceLocalInvalidRequest() {
+        SetPrice.ValidWrite.validWrite(new SetPrice.Request("not-a-uuid", "STANDARD", "25.00", "USD"))
+                           .onSuccess(_ -> fail("Expected validation to fail"))
+                           .onFailure(cause -> assertThat(cause).isInstanceOf(SetPrice.PricingError.InvalidRequest.class));
+    }
+
+    @Test
+    void validWrite_multipleInvalidFields_returnsSliceLocalCauseNotComposite() {
+        SetPrice.ValidWrite.validWrite(new SetPrice.Request("not-a-uuid", "NO_SUCH_TIER", "nope", "XXX"))
+                           .onSuccess(_ -> fail("Expected validation to fail"))
+                           .onFailure(cause -> assertThat(cause.getClass().getName()).doesNotContain("org.pragmatica.example.ticketing.shared.")
+                                                         .doesNotContain("Composite"));
+    }
 }

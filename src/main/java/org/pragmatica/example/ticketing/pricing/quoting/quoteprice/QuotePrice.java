@@ -8,6 +8,7 @@ import org.pragmatica.lang.Result;
 import org.pragmatica.example.ticketing.pricing.PricingStore;
 import org.pragmatica.example.ticketing.shared.EventId;
 import org.pragmatica.example.ticketing.shared.PriceTier;
+import org.pragmatica.example.ticketing.shared.Validation;
 
 
 /// Use case: quote the authoritative current price for an (event, tier).
@@ -19,11 +20,16 @@ public interface QuotePrice {
 
     record Response(String event, String tier, long amountMinor, String currency, long version) {}
 
+    /// Validated quote target. Each field is mapped to a cause declared in this slice's own package and
+    /// the composite `Result.all` wraps them in is unwrapped again, because the generated router's error
+    /// switch is built from this package's `Cause` types alone -- a shared cause, or the composite,
+    /// falls through to HTTP 500 instead of the client-visible refusal it should be.
     record ValidQuery(EventId event, PriceTier tier) {
         static Result<ValidQuery> validQuery(Request request) {
-            return Result.all(EventId.eventId(request.event()),
-                              PriceTier.priceTier(request.tier()))
-                         .map(ValidQuery::new);
+            return Result.all(EventId.eventId(request.event()).mapError(QuoteError::invalidEvent),
+                              PriceTier.priceTier(request.tier()).mapError(QuoteError::unacceptableTier))
+                         .map(ValidQuery::new)
+                         .mapError(Validation::firstFailure);
         }
     }
 
@@ -42,12 +48,45 @@ public interface QuotePrice {
             }
         }
 
+        /// Client-facing validation refusal (HTTP 400): a request field could not be parsed into its
+        /// domain type. Declared in this slice's own hierarchy instead of letting the shared
+        /// value-object cause through, because the slice processor builds the router's error switch
+        /// from the `Cause` types in this package alone -- a shared cause arrives unmatched and falls
+        /// through to HTTP 500. Data-carrying, so the response names the offending field and keeps the
+        /// original reason.
+        record InvalidRequest(String field, String detail) implements QuoteError {
+            @Override
+            public String message() {
+                return "Invalid request field '" + field + "': " + detail;
+            }
+        }
+
+        /// Client-facing validation refusal (HTTP 422): a request field parsed cleanly but its value
+        /// lies outside the field's admissible domain -- here, a well-formed token that names no member
+        /// of the closed `PriceTier` set. It is deliberately not the 404 that [PriceNotFound] earns: an
+        /// unknown tier is a malformed *question*, while `PriceNotFound` is a well-formed question with
+        /// no answer, and conflating them would tell the caller a tier exists but is unpriced.
+        record UnacceptableValue(String field, String detail) implements QuoteError {
+            @Override
+            public String message() {
+                return "Unacceptable value for request field '" + field + "': " + detail;
+            }
+        }
+
         static QuoteError priceNotFound() {
             return new PriceNotFound();
         }
 
         static QuoteError storeUnavailable() {
             return new StoreUnavailable();
+        }
+
+        static QuoteError invalidEvent(Cause cause) {
+            return new InvalidRequest("event", cause.message());
+        }
+
+        static QuoteError unacceptableTier(Cause cause) {
+            return new UnacceptableValue("tier", cause.message());
         }
     }
 
