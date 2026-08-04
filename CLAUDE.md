@@ -226,16 +226,20 @@ skill or delegate to `jbct-coder` **with the briefing block below** → review w
 ```
 AETHER CONTEXT (you have no built-in Aether knowledge — follow exactly):
 - Slice: interface annotated @Slice; static factory, lowercase-first name == interface, returns the
-  interface as a lambda. ALL methods return Promise<T>. Request/response are nested records. Errors
-  are a sealed interface extends Cause. Resources are factory parameters.
-- Persistence: declare a @PgSql interface with @Query("SQL with :namedParams") methods. Row types are
-  plain records (camelCase fields ↔ snake_case columns). Returns: Promise<Option<Row>> / Promise<List<Row>>
-  / Promise<Unit>. DO NOT hand-write SQL ResultSet mappers — pg-codegen generates them.
+  interface — normally a local `record … implements <Iface>` holding `execute` plus its named step
+  helpers (only a trivial single-expression slice returns a lambda). ALL methods return Promise<T>.
+  Request/response are nested records. Errors are a sealed interface extends Cause. Resources are
+  factory parameters.
+- Persistence: declare a @PgSql interface with @Query("SQL with :namedParams") methods; text blocks
+  are supported. Row types are plain records (camelCase fields ↔ snake_case columns) whose component
+  order must match the SELECT/RETURNING column order. Returns: Promise<Option<Row>> /
+  Promise<List<Row>> / Promise<Unit>. DO NOT hand-write SQL ResultSet mappers — pg-codegen generates them.
 - DO NOT write @Codec (generated). DO NOT throw exceptions. DO NOT validate inside @PgSql methods —
   validation stays in the slice via Verify.
 - Keep all JBCT idioms unchanged (Result/Option/Promise, sealed Cause, factory naming, parse-don't-validate).
 - Files: <slice iface pkg/path>, <@PgSql store pkg/path>, routes.toml at <path>, migration at
   src/main/resources/schema/V0NN__<name>.sql. The @Query SQL must match that migration's columns.
+- Build OFFLINE: `mvn -o clean install` (the pinned version is not on Maven Central).
 - DO NOT touch aether.toml or blueprint unless told.
 ```
 
