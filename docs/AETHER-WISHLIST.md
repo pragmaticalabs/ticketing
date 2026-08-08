@@ -13,7 +13,7 @@ prioritized, with concrete reproductions from the build so each item is actionab
 
 ## Priority summary
 
-**Status legend:** ✅ landed and adopted here · 🟡 landed but only partly usable · ⬜ still open.
+**Status legend:** ✅ landed (or fixed) upstream and taken up here · 🟡 landed but only partly usable · ⬜ still open.
 Statuses are as of **rc3** and are verified against this repo's code, not against a changelog. The
 per-item sections below retain the original problem statements; where an item has landed, the section
 says so.
@@ -31,10 +31,10 @@ says so.
 | 9 | Forge archive must **bundle resource providers** + fail fast | forge | **P1** | ⬜ live E2E still blocked | can't run live |
 | 10 | Ship **`@Scheduled`/`@Heartbeat`** | runtime | **P1** | ✅ `Scheduled` adopted for `SweepHolds`; no `@Heartbeat` | workaround-forcing |
 | 11 | **Shape-aware lint** (exempt transport/row/fact records) | jbct-lint | **P1** | 🟡 VO-01 bulk gone; 33 sites / 53 tokens remain | ~76 false suppressions |
-| 12 | **Canonical-name codegen** + adversarial fixtures | slice-processor | **P2** | 🟡 2 fixed, **a 3rd found on rc3** (#15) | (2 bugs already fixed) |
+| 12 | **Canonical-name codegen** + adversarial fixtures | slice-processor | **P2** | ✅ all 3 fixed — 2 in rc2, the 3rd (#15) on rc3 | (3 bugs, all fixed) |
 | 13 | Clear errors: **multi-param method**, **15-dep cap**, **data-modifying CTE** | several | **P2** | 🟡 2 of 3; the cap is *worked around*, not gone | cryptic crashes |
 | 14 | Tangential ideas (typed topics, observability aspect, test kit, …) | various | **P2** | 🟡 typed `Topic<T>` ✅, idempotency interceptor ✅ | future polish |
-| **15** | **Hyphen in an interceptor config generates uncompilable code** | slice-processor | **P0** | ⬜ **new on rc3** | build-breaking |
+| **15** | **Hyphen in an interceptor config generates uncompilable code** | slice-processor | **P0** | ✅ **fixed upstream** (`311a1b0d7`, #561); workaround removed here | was build-breaking |
 | **16** | **Interceptors attach only to slice methods** — no aspect for an internal call | resource-interceptors | **P1** | ⬜ **new on rc3** | retry/CB unusable |
 | **17** | **Retry and metrics interceptors are unprovisionable from TOML** | resource-interceptors | **P1** | ⬜ **new on rc3** | declared, unusable |
 | **18** | **`JBCT-ORD-01` is unsatisfiable for a slice impl record** — the rule and the slice shape disagree | jbct-lint | **P1** | ⬜ **new** | 24 forced suppressions |
@@ -217,15 +217,18 @@ passes `jbct check` with no ORD-01 warning and no suppression.
 
 ## P2 — robustness, clarity, and the long tail
 
-### 12. Canonical-name codegen + adversarial fixtures *(2 fixed — and a 3rd found on rc3, see #15)*
+### 12. Canonical-name codegen + adversarial fixtures *(all 3 fixed — the 3rd on rc3, see #15)*
 Both codegen bugs found this session were the same root cause: emitting *simple* type names where Java shadows
 them. **(a)** A factory's inner record `implements BuyTicket` shadowed the injected `QuotePrice.Request`/
 `Response` (JLS §6.5.5.2). **(b)** Duplicate single-type imports for two error types sharing a simple name. Both
-fixed via FQN emission (PR pragmaticalabs/pragmatica#364). **Lesson:** default generated code to fully-qualified
+fixed via FQN emission (PR pragmaticalabs/pragmatica#364). A third, #15, surfaced on rc3 with the same
+shape one level down — a *derived identifier* rather than a type reference — and is now fixed too
+(`311a1b0d7`). **Lesson:** default generated code to fully-qualified
 references *everywhere*, and add permanent fixtures for the two situations the book's idioms *guarantee* —
 "slice injects slice, both with `Request`/`Response`" and "two errors, same simple name." Also: when generated
 code fails to compile, the error lands far from the cause — **attribute generated-code errors back to the slice
-+ source line.**
++ source line.** That last ask is still open: #15's fix makes the bad identifier unreachable, but a
+future generated-code failure would still surface as raw javac output with no slice attribution.
 
 ### 13. Replace cryptic crashes with clear errors
 - **Multi-param slice method** crashes route generation (`parameterType()` assumes one). Either support multi-
@@ -275,25 +278,42 @@ code fails to compile, the error lands far from the cause — **attribute genera
 
 ## New on rc3 — found while adopting interceptors
 
-### 15. A hyphen in an interceptor config generates uncompilable code — **P0**
-**Problem.** An interceptor `@ResourceQualifier(config = "cache.availability.seat-status")` makes the
-slice-processor emit an **illegal Java identifier**. The generator translates `.` → `_` when deriving
-the identifier from the config path but leaves `-` untouched, so the generated code contains a name
-with a hyphen in it and does not compile. The error surfaces in generated code, far from the
-annotation that caused it.
-**Evidence (this session).** Hit on the first interceptor added. **Workaround in force: every
-interceptor config section in this repo is spelled with underscores** (`cache.availability.seat_status`,
-`log.quote.project_price`). The bug is specific to *interceptor* configs — `[scheduling.sweep-holds]`
-and the kebab-case topic sections (`[seat-sold]`) compile normally, which is exactly why it went
-unnoticed until interceptors were adopted, and why it is easy to hit: hyphens are the established
-house style for every *other* config section.
-**Proposal.** Sanitize the whole path when deriving an identifier (translate any non-identifier
-character, not just `.`), or reject a hyphenated interceptor config at the annotation site with a
-located error naming the offending section.
-**Acceptance.** `config = "cache.availability.seat-status"` either compiles or fails at the
-annotation with a clear message. **This is the third codegen bug this project has found in the rc
-series** — the same lesson as #12: generated identifiers and references need a canonical, total
-transformation, plus fixtures for the inputs house style guarantees.
+### 15. A hyphen in an interceptor config generates uncompilable code — **P0** — ✅ FIXED upstream
+**Status.** Fixed in `311a1b0d7` (#561) on `release-1.0.0-rc3`. **The workaround in this repo is
+removed** and all eight interceptor sections are hyphenated again. The problem statement is kept
+below because the reproduction and the lesson outlive the fix.
+**Problem.** An interceptor `@ResourceQualifier(config = "cache.availability.seat-status")` made the
+slice-processor emit an **illegal Java identifier**. `FactoryClassGenerator.collectUniqueInterceptors`
+built the lambda parameter name using `configSection().replace('.', '_')` as its *only* sanitization,
+while the section itself is arbitrary user text — so the emitted factory read
+`.map((store, methodInterceptor_cache_availability_seat-status) -> {` and javac reported
+`')' or ',' expected` / `illegal start of expression` **inside generated code**, with no `[SLICE-…]`
+diagnostic pointing at the slice. The type half of the same name already went through
+`variableSafeName()`; only the config half was unguarded.
+**Evidence (this session).** Hit on the first interceptor added. The bug was specific to *interceptor*
+configs — `[scheduling.sweep-holds]` and the kebab-case topic sections (`[seat-sold]`) compiled
+normally, because `Scheduled` never reaches the factory and publisher/subscription qualifiers pass the
+hyphenated topic through as a *string literal*. That is exactly why it went unnoticed until
+interceptors were adopted, and why it was easy to hit: hyphens are the established house style for
+every *other* config section. The workaround at the time was to spell every interceptor section with
+underscores (`cache.availability.seat_status`), which made `resources.toml` internally inconsistent.
+**Resolution.** Both halves of the proposal landed, in one commit. Sanitization moved into
+`ResourceQualifierModel.variableSafeConfigSection()`, replacing every code point that fails
+`Character.isJavaIdentifierPart` with `_` (identifier-*part*, not -*start*: the fragment is only ever
+appended after a `typeName_` prefix, so a leading digit is legal there). Sanitizing alone was not
+sufficient — it is not injective, so `a-b` and `a_b` collapse onto one identifier while
+`deduplicationKey()` still keeps them as two entries, and two interceptors differing only by that
+separator declared the same lambda parameter twice. Issued names are therefore tracked and
+de-collided with a numeric suffix (`…_2`). No annotation-site rejection was added, which is the
+better outcome: every input now yields a valid unique identifier, and rejecting hyphens would have
+broken the very TOML style this item asked to support. Only the local variable name changed — the
+`ctx.resources().provide(Type.class, "…")` literal still carries the section verbatim, so resolution
+behaviour and envelope structure are untouched. Three regression tests cover the hyphenated section,
+the separator collision, and the pre-existing dotted form; the interceptor path had **no fixture at
+all** before, which is why it shipped.
+**Lesson (unchanged, and the same as #12).** Generated identifiers and references need a canonical,
+*total* transformation — plus fixtures for the inputs house style guarantees. This was the third
+codegen bug this project found in the rc series; all three are now fixed upstream.
 
 ### 16. Interceptors attach only to slice methods — so retry/circuit-breaking is unusable where it is needed — **P1**
 **Problem.** A `MethodInterceptor` attaches to a `@Slice` interface method. Real resilience concerns
@@ -436,7 +456,7 @@ notes** — the adoption pass happened the same day and is recorded in the parag
 | 9 | Forge bundles providers | Not landed — no forge submodule depends on `resource-http`/`resource-notification`; live E2E still blocked | n/a |
 | 10 | `@Scheduled`/`@Heartbeat` | **Partial** — `Scheduled` is real (zero-param `Promise<Unit>` methods, interval or cron, KV-tracked state). No `@Heartbeat` | **Yes** — `SweepHolds.sweep()` on a 60s schedule; operator route kept |
 | 11 | Shape-aware lint | **Partial** — JBCT-VO-01 now exempts `@Slice`/`@PgSql` framework shapes; no test-tree awareness | **Yes** — the VO-01 bulk (53) is gone; 33 sites / 53 tokens remain (24 ORD-01, 20 SEQ-01, 6 UC-02, 3 VO-01) |
-| 12 | Canonical-name codegen | **Landed** — both PR #364 fixes confirmed in released sources | Yes — **but a third codegen bug surfaced on rc3** (#15) |
+| 12 | Canonical-name codegen | **Landed** — both PR #364 fixes confirmed in released sources | Yes — **and the third codegen bug (#15), found on rc3, is now fixed upstream too** |
 | 13 | Clear errors | **Two of three landed** — multi-param slice methods auto-generate a wrapper `<Method>Request` (no more crash); data-modifying CTEs now a clear located compile error. **The 15-dep cap is NOT gone:** `BatchedAll` lives in the slice-processor's *generator* and chunks a generated factory's dependency list; core's `Promise.all` still tops out at `Mapper15`, so hand-written code is unchanged | n/a |
 | 14 | Typed topics | **Landed** — `Topic<T>` in slice-api (envelope 1005→1006) | **Yes** — `Topic.of(...)` constants on each fact record |
 
@@ -482,5 +502,7 @@ third party can build any non-trivial slice project from Central, on any rc line
 
 *Built from the ticketing posterchild; items 1–14 from the 2026-06 build, items 15–17 from the rc3
 interceptor adoption. Each item has a live reproduction in this repo; ask for the exact
-files/symptoms per item. The three I'd file first: **#15** (hyphen codegen bug — build-breaking and
-a one-line fix), **#1** (error→HTTP totality) and **#2** (pub-sub honesty).*
+files/symptoms per item. **#15 has since been fixed upstream** (`311a1b0d7`, #561) and its workaround
+is removed here. Of what remains, the three I'd file first: **#1** (error→HTTP totality), **#2**
+(pub-sub honesty) and **#16** (circuit breaker trips on designed outcomes — a payment-gateway breaker
+is still unsafe to adopt).*

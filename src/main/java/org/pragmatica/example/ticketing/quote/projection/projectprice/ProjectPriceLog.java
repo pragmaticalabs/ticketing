@@ -11,7 +11,7 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
 
 /// Logging qualifier for the `PriceChanged` quote projection (rc3 `LoggingMethodInterceptor`).
-/// Annotates `ProjectPrice.execute()`; the policy lives in `[log.quote.project_price]` in
+/// Annotates `ProjectPrice.execute()`; the policy lives in `[log.quote.project-price]` in
 /// resources.toml. The interceptor carries its own slf4j binding, which is why it is the right
 /// answer here: log4j/slf4j are test-scope only, so `src/main/java` has no logger of its own.
 ///
@@ -30,7 +30,7 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 /// never delivered. `INFO` so it holds under a default production config; volume is bounded by the
 /// repricing rate, the lowest of the five consumers. `log_args = true` is safe — `PriceChanged`
 /// carries an event id, tier, amount, currency and version, no customer or payment data.
-@ResourceQualifier(type = LoggingMethodInterceptor.class, config = "log.quote.project_price")
+@ResourceQualifier(type = LoggingMethodInterceptor.class, config = "log.quote.project-price")
 @Retention(RUNTIME)
 @Target(METHOD)
 public @interface ProjectPriceLog {}

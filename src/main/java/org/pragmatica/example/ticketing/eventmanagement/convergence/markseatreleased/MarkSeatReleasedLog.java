@@ -12,7 +12,7 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
 /// Logging qualifier for the `SeatReleased` convergence consumer (rc3 `LoggingMethodInterceptor`).
 /// Annotates `MarkSeatReleased.execute()`; the policy lives in
-/// `[log.eventmanagement.mark_seat_released]` in resources.toml. The interceptor carries its own
+/// `[log.eventmanagement.mark-seat-released]` in resources.toml. The interceptor carries its own
 /// slf4j binding, which is why it is the right answer here: log4j/slf4j are test-scope only, so
 /// `src/main/java` has no logger of its own.
 ///
@@ -27,7 +27,7 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 /// traffic. `log_args = true` is safe and necessary here: `SeatReleased` carries only identifiers
 /// and a version — no customer, payment, or contact data — and without the seat id an error line
 /// names no seat to investigate.
-@ResourceQualifier(type = LoggingMethodInterceptor.class, config = "log.eventmanagement.mark_seat_released")
+@ResourceQualifier(type = LoggingMethodInterceptor.class, config = "log.eventmanagement.mark-seat-released")
 @Retention(RUNTIME)
 @Target(METHOD)
 public @interface MarkSeatReleasedLog {}

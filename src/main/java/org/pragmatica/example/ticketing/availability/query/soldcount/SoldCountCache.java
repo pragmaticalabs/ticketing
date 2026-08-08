@@ -11,7 +11,7 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
 
 /// Cache qualifier for the per-event sold counter (rc3 `CacheMethodInterceptor`). Annotates
-/// `SoldCount.execute()`; the policy lives in `[cache.availability.sold_count]` in resources.toml.
+/// `SoldCount.execute()`; the policy lives in `[cache.availability.sold-count]` in resources.toml.
 ///
 /// `CACHE_ASIDE` over a `LOCAL` (in-process) backend. **Not** `TIERED`/`DISTRIBUTED`: those hold
 /// app-typed results and so depend on the rc3 codec-scoping fix, which this repo has not exercised.
@@ -24,7 +24,7 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 /// expensive query to repeat and the most tolerant of lag: the number is displayed, never decided
 /// on. Sales move it continuously, so a longer TTL would visibly freeze a ticker that customers
 /// watch; five seconds absorbs a burst of sales without doing that.
-@ResourceQualifier(type = CacheMethodInterceptor.class, config = "cache.availability.sold_count")
+@ResourceQualifier(type = CacheMethodInterceptor.class, config = "cache.availability.sold-count")
 @Retention(RUNTIME)
 @Target(METHOD)
 public @interface SoldCountCache {}

@@ -79,21 +79,21 @@ helo_hostname = "ticketing.example"
 #     InMemoryCache never fails, so the interceptor's fail-closed path is unreachable. Consequence to
 #     keep in mind: each of the 5 instances caches privately and nothing invalidates on a fact, so
 #     ttl_seconds is the sole bound on staleness. Rationale per TTL is in each qualifier's javadoc. ---
-[cache.availability.seat_status]
+[cache.availability.seat-status]
 cache_name = "seat-status"
 strategy = "CACHE_ASIDE"
 ttl_seconds = 2
 max_entries = 10000
 mode = "LOCAL"
 
-[cache.availability.sold_count]
+[cache.availability.sold-count]
 cache_name = "sold-count"
 strategy = "CACHE_ASIDE"
 ttl_seconds = 5
 max_entries = 1000
 mode = "LOCAL"
 
-[cache.quote.quote_for_customer]
+[cache.quote.quote-for-customer]
 cache_name = "quote-for-customer"
 strategy = "CACHE_ASIDE"
 ttl_seconds = 5
@@ -115,35 +115,35 @@ mode = "LOCAL"
 #     their failures, so the interceptor sees the typed cause and logging it is the whole point. The
 #     three projections recover to Unit *inside* execute, so the interceptor only ever observes
 #     Success(()) — logging that would print a constant, so they log arrival and duration instead. ---
-[log.eventmanagement.mark_seat_sold]
+[log.eventmanagement.mark-seat-sold]
 name = "mark-seat-sold"
 level = "INFO"
 log_args = true
 log_result = true
 log_duration = true
 
-[log.eventmanagement.mark_seat_released]
+[log.eventmanagement.mark-seat-released]
 name = "mark-seat-released"
 level = "INFO"
 log_args = true
 log_result = true
 log_duration = true
 
-[log.availability.project_seat_sold]
+[log.availability.project-seat-sold]
 name = "project-seat-sold"
 level = "INFO"
 log_args = true
 log_result = false
 log_duration = true
 
-[log.availability.project_seat_released]
+[log.availability.project-seat-released]
 name = "project-seat-released"
 level = "INFO"
 log_args = true
 log_result = false
 log_duration = true
 
-[log.quote.project_price]
+[log.quote.project-price]
 name = "project-price"
 level = "INFO"
 log_args = true

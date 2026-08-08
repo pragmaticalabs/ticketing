@@ -318,14 +318,24 @@ AETHER CONTEXT (you have no built-in Aether knowledge — follow exactly):
   the operator HTTP route kept alongside; a `resources.toml` must still declare every
   `@ResourceQualifier` config section, typed `Topic<T>` notwithstanding; `[errors] strict = true` is
   **enabled in all 19 routed slices**, so an unmapped `Cause` is a build failure.
-- **THIRD codegen bug, open on rc3 — hyphens in an interceptor config.** An interceptor
-  `@ResourceQualifier(config = "...")` whose value contains a **hyphen** generates an illegal Java
-  identifier (the generator translates `.` → `_` but leaves `-` alone) and the emitted code does not
-  compile. **Workaround in force: every interceptor config section uses underscores**
-  (`cache.availability.seat_status`, `log.quote.project_price`). Hyphens are still fine elsewhere —
-  `[scheduling.sweep-holds]` and the kebab-case topic sections compile normally. This is the third
-  codegen bug this project has found in the rc series; the first two (route-import collision +
-  codec FQN) were fixed upstream in `slice-processor:1.0.0-rc2` via PR pragmaticalabs/pragmatica#364.
+- **THIRD codegen bug — found here on rc3, fixed upstream, workaround removed.** An interceptor
+  `@ResourceQualifier(config = "...")` whose value contained a **hyphen** generated an illegal Java
+  identifier (the generator translated `.` → `_` and left everything else alone), and javac failed
+  *inside generated code* with no `[SLICE-…]` diagnostic naming the slice. Fixed upstream in commit
+  `311a1b0d7` (#561, `release-1.0.0-rc3`, three regression tests): the config section is sanitized
+  per code point via `Character.isJavaIdentifierPart`, and — since that collapses `a-b` and `a_b` onto
+  one name — issued names are de-collided with a numeric suffix. Only the generated *variable* name
+  is rewritten; the `provide(Type.class, "…")` literal keeps the section verbatim. **All eight
+  interceptor sections are hyphenated again** (`[cache.availability.seat-status]`,
+  `[log.quote.project-price]`), matching the topic and scheduling sections — do not reintroduce the
+  underscore workaround. This was the third codegen bug this project found in the rc series; the
+  first two (route-import collision + codec FQN) were fixed in `slice-processor:1.0.0-rc2` via PR
+  pragmaticalabs/pragmatica#364, so all three are now closed upstream. Still open and unrelated:
+  `JBCT-ORD-01` on the slice impl record (24 suppressions), non-TOML-provisionable interceptor
+  `RetryConfig`/`MetricsConfig`, `CircuitBreakerConfig` without a trip predicate, and pg-codegen's
+  spurious "no matching SELECT column" warnings on `BookingStore.expireOrphanedConfirmations` (one
+  per `SeatRef` component — it resolves the subquery's scope independently of the enclosing
+  `UPDATE … RETURNING`).
 - **Fixed-message causes are enum constants, not empty records — one enum per HTTP status per slice.**
   A failure carrying no data is a constant on a status-named enum (`StateConflict.SEAT_UNAVAILABLE`,
   `ServiceUnavailable.BOOKING_STORE`, `EntityMissing.EVENT`, `AccessRefused.NOT_OWNER`,

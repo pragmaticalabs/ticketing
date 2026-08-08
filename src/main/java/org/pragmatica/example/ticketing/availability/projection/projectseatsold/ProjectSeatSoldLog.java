@@ -11,7 +11,7 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
 
 /// Logging qualifier for the `SeatSold` availability projection (rc3 `LoggingMethodInterceptor`).
-/// Annotates `ProjectSeatSold.execute()`; the policy lives in `[log.availability.project_seat_sold]`
+/// Annotates `ProjectSeatSold.execute()`; the policy lives in `[log.availability.project-seat-sold]`
 /// in resources.toml. The interceptor carries its own slf4j binding, which is why it is the right
 /// answer here: log4j/slf4j are test-scope only, so `src/main/java` has no logger of its own.
 ///
@@ -29,7 +29,7 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 /// that holds under a default production config; volume is bounded by the sale rate. `log_args =
 /// true` is safe — `SeatSold` carries only identifiers and a version, no customer or payment data —
 /// and is what names the seat to investigate.
-@ResourceQualifier(type = LoggingMethodInterceptor.class, config = "log.availability.project_seat_sold")
+@ResourceQualifier(type = LoggingMethodInterceptor.class, config = "log.availability.project-seat-sold")
 @Retention(RUNTIME)
 @Target(METHOD)
 public @interface ProjectSeatSoldLog {}

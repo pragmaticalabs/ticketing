@@ -11,7 +11,7 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
 
 /// Logging qualifier for the `SeatSold` convergence consumer (rc3 `LoggingMethodInterceptor`).
-/// Annotates `MarkSeatSold.execute()`; the policy lives in `[log.eventmanagement.mark_seat_sold]` in
+/// Annotates `MarkSeatSold.execute()`; the policy lives in `[log.eventmanagement.mark-seat-sold]` in
 /// resources.toml. The interceptor carries its own slf4j binding, which is why it is the right
 /// answer here: log4j/slf4j are test-scope only, so `src/main/java` has no logger of its own.
 ///
@@ -26,7 +26,7 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 /// traffic, and a seat sale is an event worth an audit line. `log_args = true` is safe and necessary
 /// here: `SeatSold` carries only identifiers and a version — no customer, payment, or contact data —
 /// and without the seat id an error line names no seat to investigate.
-@ResourceQualifier(type = LoggingMethodInterceptor.class, config = "log.eventmanagement.mark_seat_sold")
+@ResourceQualifier(type = LoggingMethodInterceptor.class, config = "log.eventmanagement.mark-seat-sold")
 @Retention(RUNTIME)
 @Target(METHOD)
 public @interface MarkSeatSoldLog {}

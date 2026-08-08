@@ -386,12 +386,12 @@ config is `resources.toml`. The complete inventory, in file order — 17 section
   `interval = "60s"`, `cron = ""`, `execution_mode = "SINGLE"`.
 - `[http] base_url, timeout_ms` — the payment gateway (+ a **local stub gateway** for smoke test).
 - `[notification] backend = "smtp"` + `[notification.smtp]` host/port/… (+ a **local SMTP sink** e.g. Mailpit on :1025).
-- **Interceptor sections (§11)** — `[cache.availability.seat_status]`,
-  `[cache.availability.sold_count]`, `[cache.quote.quote_for_customer]` (all `mode = "LOCAL"`), plus
-  `[log.eventmanagement.mark_seat_sold]`, `[log.eventmanagement.mark_seat_released]`,
-  `[log.availability.project_seat_sold]`, `[log.availability.project_seat_released]`,
-  `[log.quote.project_price]`. **Underscores are deliberate** — a hyphen in an *interceptor* config
-  path generates uncompilable code on rc3 (§8.9). Hyphens remain fine for topics and scheduling.
+- **Interceptor sections (§11)** — `[cache.availability.seat-status]`,
+  `[cache.availability.sold-count]`, `[cache.quote.quote-for-customer]` (all `mode = "LOCAL"`), plus
+  `[log.eventmanagement.mark-seat-sold]`, `[log.eventmanagement.mark-seat-released]`,
+  `[log.availability.project-seat-sold]`, `[log.availability.project-seat-released]`,
+  `[log.quote.project-price]`. **Kebab-case throughout, same as topics and scheduling** — the rc3
+  codegen bug that once forced underscores here is fixed upstream and the workaround is gone (§8.9).
 - Per-slice `src/main/resources/slices/<Name>.toml` `[blueprint] instances = N` (read slices: higher N)
   — 24 of them, one per slice.
 
@@ -488,14 +488,34 @@ open-event, set-price, buy, cancel, availability, quote.
    `@Target(ANNOTATION_TYPE)` only, so a `Scheduled` method needs a **custom wrapper annotation**,
    exactly like the pub-sub subscription qualifiers. The operator HTTP route is kept alongside so a
    sweep can still be forced by hand.
-9. **THIRD codegen bug, OPEN on rc3 — a hyphen in an interceptor config path.** An interceptor
-   `@ResourceQualifier(config = "cache.availability.seat-status")` generates an **illegal Java
-   identifier**: the generator translates `.` → `_` when deriving the identifier but leaves `-`
-   untouched, and the emitted code does not compile. **Workaround in force: every interceptor config
-   section is spelled with underscores** (`cache.availability.seat_status`). The bug is specific to
-   *interceptor* configs — `[scheduling.sweep-holds]` and the kebab-case topic sections compile
-   normally, which is why it went unnoticed until interceptors were adopted. This is the **third**
-   codegen bug this project has surfaced in the rc series; the first two were fixed upstream.
+9. **THIRD codegen bug — a hyphen in an interceptor config path. FIXED upstream; workaround removed.**
+   An interceptor `@ResourceQualifier(config = "cache.availability.seat-status")` generated an
+   **illegal Java identifier**: `FactoryClassGenerator.collectUniqueInterceptors` built the lambda
+   parameter name with `configSection().replace('.', '_')` as its *only* sanitization, so the hyphen
+   survived and the emitted factory read
+   `.map((store, methodInterceptor_cache_availability_seat-status) -> {`. javac reported
+   `')' or ',' expected` **inside generated code**, with no `[SLICE-…]` diagnostic pointing at the
+   slice. It stayed invisible until interceptors were adopted because hyphens work everywhere else:
+   `Scheduled` never reaches the factory, and publisher/subscription qualifiers pass the hyphenated
+   topic through as a *string literal*. The type half of the same identifier already went through
+   `variableSafeName()` — only the config half was unguarded.
+   **FIXED** — upstream commit `311a1b0d7` (#561) on `release-1.0.0-rc3`. Sanitization now lives in
+   `ResourceQualifierModel.variableSafeConfigSection()`, which replaces every code point failing
+   `Character.isJavaIdentifierPart` with `_` (identifier-*part*, not -*start*: the fragment is only
+   ever appended after a `typeName_` prefix, so a leading digit is legal there). Sanitizing alone was
+   not enough and was fixed in the same commit — the mapping is not injective (`a-b` and `a_b`
+   collapse onto one identifier while `deduplicationKey()` still keeps them as two entries, so two
+   interceptors differing only by separator declared the same lambda parameter twice), hence issued
+   names are tracked and de-collided with a numeric suffix. Three regression tests cover the
+   hyphenated section, the separator collision, and the pre-existing dotted form; the interceptor
+   path had no fixture at all before, which is why it shipped. Only the local variable name changes —
+   the `ctx.resources().provide(Type.class, "…")` literal still carries the section verbatim, so
+   resolution behaviour and envelope structure are untouched.
+   **Here:** the underscore workaround is gone; all eight interceptor sections are hyphenated again,
+   so `resources.toml` is once more uniform with its topic and scheduling sections. Generated
+   identifiers read `cacheMethodInterceptor_cache_availability_seat_status`, and all 8
+   `intercept(impl::execute)` wirings are intact. This was the **third** codegen bug this project
+   surfaced in the rc series — with items 1 and 1b, **all three are now fixed upstream**.
 10. **The `aether/resource` subtree has never been published.** `resource-api`,
    `resource-notification` and `resource-interceptors` 404 on Maven Central on every rc line —
    `aether/resource/pom.xml` sets `<skipPublishing>true</skipPublishing>`, inherited by all the
@@ -528,7 +548,8 @@ Proven against the current toolchain — every slice MUST follow them:
   `@ResourceQualifier(type = Scheduled.class, config = "<section>")`, applied to a **zero-parameter**
   `Promise<Unit>` method that delegates to `execute(new Request())`.
 - **Interceptors:** same wrapper-annotation pattern, `@Target(METHOD)`, applied to `execute`. **Config
-  section names must not contain hyphens** (§8.9).
+  section names are kebab-case like every other section** — the generator sanitizes and de-collides
+  them into the identifiers it emits (§8.9).
 - **Resources:** `@Http org.pragmatica.aether.resource.http.HttpClient` (`postJson(url, body, Class<T>)`);
   `@Notify org.pragmatica.aether.resource.notification.NotificationSender` (`send(Notification)`).
 - **Direct inter-slice call:** inject the callee interface as an unannotated factory param.

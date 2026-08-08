@@ -11,7 +11,7 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
 
 /// Cache qualifier for the customer-facing price read (rc3 `CacheMethodInterceptor`). Annotates
-/// `QuoteForCustomer.execute()`; the policy lives in `[cache.quote.quote_for_customer]` in
+/// `QuoteForCustomer.execute()`; the policy lives in `[cache.quote.quote-for-customer]` in
 /// resources.toml.
 ///
 /// `CACHE_ASIDE` over a `LOCAL` (in-process) backend. **Not** `TIERED`/`DISTRIBUTED`: those hold
@@ -27,7 +27,7 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 /// `QuotePrice` and never from this projection. What a long TTL would cost is trust — a customer
 /// quoted the old price and charged the new one — which is why it stays short despite prices
 /// changing far less often than seat state.
-@ResourceQualifier(type = CacheMethodInterceptor.class, config = "cache.quote.quote_for_customer")
+@ResourceQualifier(type = CacheMethodInterceptor.class, config = "cache.quote.quote-for-customer")
 @Retention(RUNTIME)
 @Target(METHOD)
 public @interface QuoteCache {}

@@ -177,21 +177,29 @@ Each slice's exact route + error→status map: `src/main/resources/.../<usecase>
 Building the book's idiomatic patterns — and then the one-use-case-per-slice + synchronous-call design
 — surfaced real toolchain issues (full list: [`docs/DESIGN.md`](docs/DESIGN.md) §8):
 
-- **Three slice-processor codegen bugs found here.** Two were fixed upstream via PR
-  [pragmaticalabs/pragmatica#364](https://github.com/pragmaticalabs/pragmatica/pull/364), each with a
-  regression test, and shipped in `slice-processor:1.0.0-rc2`:
+- **Three slice-processor codegen bugs found here — all three fixed upstream.** The first two went in
+  via PR [pragmaticalabs/pragmatica#364](https://github.com/pragmaticalabs/pragmatica/pull/364), each
+  with a regression test, and shipped in `slice-processor:1.0.0-rc2`:
   1. duplicate single-type imports when two error types share a simple name (the book's per-VO
      `Blank`/`Malformed` guarantee it);
   2. generated codecs referenced an injected slice's nested `Request`/`Response` by *simple* name,
      which the host slice's inherited member types shadow (JLS §6.5.5.2) — guaranteed by "every slice
      has `Request`/`Response`" + "a slice injects another slice". Both now emit fully-qualified names.
 
-  The third is **open, found on rc3**: an interceptor `@ResourceQualifier(config = "...")` whose
-  config path contains a **hyphen** generates an illegal Java identifier — the generator maps `.` to
-  `_` but leaves `-` untouched — and the emitted code does not compile. Worked around here by
-  spelling every interceptor config section with underscores (`cache.availability.seat_status`). The
-  hyphen is only fatal for *interceptor* configs: `[scheduling.sweep-holds]` and the kebab-case topic
-  sections are unaffected.
+  The third surfaced on rc3, on the first interceptor added: an interceptor
+  `@ResourceQualifier(config = "cache.availability.seat-status")` derived its generated lambda
+  parameter name with `configSection.replace('.', '_')` as the only sanitization, so a **hyphen**
+  survived into an illegal Java identifier and javac failed *inside generated code*, with no
+  diagnostic pointing at the slice. Fixed upstream in commit `311a1b0d7` (#561) on
+  `release-1.0.0-rc3`: `ResourceQualifierModel.variableSafeConfigSection()` now maps every code point
+  failing `Character.isJavaIdentifierPart` to `_`, and because that mapping is not injective (`a-b`
+  and `a_b` collapse onto one name) the generator additionally de-collides issued names with a
+  numeric suffix — three regression tests cover the hyphen, the separator collision, and the plain
+  dotted form. **The workaround here is removed:** all eight interceptor sections are hyphenated
+  again (`[cache.availability.seat-status]`, `[log.quote.project-price]`), so `resources.toml` is
+  once more consistent with its topic and scheduling sections. Only the local variable name is
+  sanitized — the `provide(Type.class, "…")` literal still carries the section verbatim, so
+  resolution is unchanged.
 - **Fixed since rc1, verified here:** migrations are auto-discovered from `V*__*.sql` (the
   `schema/migrations.list` manifest this project used to carry is deleted); text-block `@Query`
   emits correctly and the stores use it throughout; `[errors] strict = true` turns an unmapped

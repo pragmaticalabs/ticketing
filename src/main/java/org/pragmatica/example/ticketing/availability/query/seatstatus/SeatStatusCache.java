@@ -11,7 +11,7 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
 
 /// Cache qualifier for the per-seat status read (rc3 `CacheMethodInterceptor`). Annotates
-/// `SeatStatus.execute()`; the policy lives in `[cache.availability.seat_status]` in resources.toml.
+/// `SeatStatus.execute()`; the policy lives in `[cache.availability.seat-status]` in resources.toml.
 ///
 /// `CACHE_ASIDE` over a `LOCAL` (in-process) backend. **Not** `TIERED`/`DISTRIBUTED`: those hold
 /// app-typed results and so depend on the rc3 codec-scoping fix, which this repo has not exercised —
@@ -27,7 +27,7 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 /// refresh a customer would make anyway, on top of the projection lag this read already carries. A
 /// stale hit costs at most a wasted purchase attempt, which the contended-seat design-out fast-fails
 /// with `SeatUnavailable` — it can never oversell.
-@ResourceQualifier(type = CacheMethodInterceptor.class, config = "cache.availability.seat_status")
+@ResourceQualifier(type = CacheMethodInterceptor.class, config = "cache.availability.seat-status")
 @Retention(RUNTIME)
 @Target(METHOD)
 public @interface SeatStatusCache {}
