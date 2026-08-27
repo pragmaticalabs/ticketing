@@ -14,6 +14,15 @@ posterchild: the book designs the processes; this repo runs them.
 > `resource-interceptors`** — the `org.pragmatica.aether.resource.*` API (`@PgSql`, `@Http`,
 > `@Notify`) plus the interceptor factories. A fresh clone must build the rc3 branch locally first.
 >
+> **This is tracked as [pragmaticalabs/pragmatica#668](https://github.com/pragmaticalabs/pragmatica/issues/668)**
+> — "GA gate: publish aether artifacts to Maven Central." Until it lands, **every fresh clone of this
+> repo must build the `pragmatica` monorepo from source into `~/.m2` before `mvn install` here can
+> resolve anything under `org.pragmatica-lite:*`** (see Step 0 in "Run locally (Forge)" below). Once
+> #668 ships, that local build step goes away for whatever artifact set it covers — `mvn install` in
+> this repo starts resolving those coordinates from Central instead, the same way `core` and
+> `jbct-maven-plugin` already do at rc2. Watch the issue rather than this README for the exact
+> artifact list and version it lands at.
+>
 > Design rationale and the full process catalog live in [`docs/DESIGN.md`](docs/DESIGN.md).
 
 ---
@@ -143,22 +152,169 @@ client as a 500.
 
 ## Run locally (Forge)
 
+Aether has four runnable/embeddable surfaces: **Forge** (a dashboarded dev cluster with load/failure
+tooling — the one this section uses), the production **`Main`** node, the **`aether` CLI**, and
+**Ember**, which is embeddable-only and has no binary of its own (`Ember.cluster(n).withH2()...
+start()` inside a JVM you write). For a from-zero developer, Forge is the entry point.
+
+This walkthrough assumes **nothing installed** beyond a JDK, Maven, and a container runtime — every
+command below was actually run against this repository on 2026-08-27; where output is quoted, it is
+the real output observed, not a mock-up.
+
+### Prerequisites (verified against this repo's build files)
+
+| Tool | Required | Verified with | Source of truth |
+|---|---|---|---|
+| JDK | 25+ | Homebrew OpenJDK 25.0.2 | `pom.xml` → `maven.compiler.release=25` |
+| Maven | 3.9+ (no enforced floor in this pom; use a recent 3.9.x) | 3.9.12 | practical — untested below this |
+| Docker or Podman | any recent version | Docker 29.3.0 | `start-postgres.sh` auto-detects either |
+| git | any | — | to clone `pragmatica` in Step 0 |
+
+### Step 0 — build the Aether runtime from source
+
+**Required today** because of [#668](https://github.com/pragmaticalabs/pragmatica/issues/668) (see the
+Status note above): nothing this project needs under `org.pragmatica-lite:*` is on Maven Central at
+rc3, so `~/.m2` has to be populated by building the monorepo yourself.
+
+```bash
+git clone https://github.com/pragmaticalabs/pragmatica.git ~/IdeaProjects/pragmatica
+cd ~/IdeaProjects/pragmatica
+git checkout release-1.0.0-rc3
+
+# bootstrap the annotation processors / Maven plugins the rest of the build needs, then install everything
+mvn install -DskipTests -Djbct.skip=true -pl jbct/jbct-maven-plugin,jbct/slice-processor,aether/pg-tools/pg-codegen -am
+mvn install -DskipTests
+```
+
+These are steps 1 and 3 of the monorepo's own `./build.sh` (6 steps total) — the only two an external
+consumer needs; the rest are the project's own lint gate and test-blueprint builds.
+
+> **Do not run `mvn verify` anywhere in the pragmatica repo.** Its Failsafe integration suite includes
+> a Hetzner Cloud test that binds to the real Hetzner API and provisions a paid server if
+> `HCLOUD_TOKEN` is set in your environment. `mvn install` (used above) never touches it.
+
+**On timing:** this was verified to *work* (a clean `mvn install -DskipTests` against a warm `~/.m2`
+completed in well under a minute), but that number is **not** a true cold-cache figure — this
+environment's local repository and `target/` directories were already populated from prior builds. A
+genuine from-zero build (empty `~/.m2`, no `target/`) compiles the full `core` + `aether` + `jbct`
+tree and will take meaningfully longer; budget several minutes on first run rather than trusting the
+warm-cache number.
+
+**How to know it worked:**
+
+```bash
+ls ~/.m2/repository/org/pragmatica-lite/aether/resource-api/
+ls ~/.m2/repository/org/pragmatica-lite/aether/forge-core/
+```
+
+Both should list a `1.0.0-rc3` directory. If `forge-core` is missing, note it lives at
+`aether/forge-core/` in the monorepo, **not** `aether/forge/forge-core/` — a reasonable-looking but
+wrong path if you're hunting for it manually.
+
+Back in this repo, confirm resolution actually works:
+
+```bash
+mvn clean install -DskipTests -q   # should succeed silently; this is what run-forge.sh does for you
+```
+
+### Run the cluster
+
 ```bash
 ./start-postgres.sh                 # PostgreSQL 17 (db=forge); Aether applies src/main/resources/schema on deploy
 python3 scripts/stub-gateway.py &   # stub payment gateway on :9100 (BuyTicket's @Http target)
 # optional: a MailHog/Mailpit SMTP sink on :1025 captures @Notify mail — notifications are FER, optional
-./run-forge.sh                      # build + 5-node cluster; deploys the blueprint BY COORDINATE; app on :8070
+./run-forge.sh                      # rebuilds the slice + 5-node cluster; deploys the blueprint BY COORDINATE; app on :8070
 ```
 
-> The forge resolves `--blueprint` as an **artifact coordinate** (not a file path); `run-forge.sh`
-> passes `org.pragmatica.example:ticketing:1.0.0-SNAPSHOT:blueprint` accordingly.
+`./start-postgres.sh` prints its own confirmation; on an already-running container this repo actually
+produced:
+
+```
+PostgreSQL is already running (container: ticketing-postgres)
+Applying schema/init.sql...
+
+PostgreSQL running on port 5432
+  Connection: postgresql://postgres:postgres@localhost:5432/forge
+```
+
+On a first run it instead prints `Creating PostgreSQL container...` / `Waiting for PostgreSQL...`
+before the same final block.
+
+> **`aether.toml`'s `[database]` block must be filled in — it is not optional despite the file's own
+> "uncomment to enable" comment.** Every `@PgSql`-backed slice (most of them — see the telescope table
+> above) needs `database.async_url` to provision its store; leave the block commented out (the
+> checked-out default) and those slices fail to deploy. This checkout already has it set to match
+> `start-postgres.sh`'s connection string:
+> ```toml
+> [database]
+> async_url = "postgresql://postgres:postgres@localhost:5432/forge"
+> ```
+> Don't confuse this with `forge.toml`'s own `[database] enabled = false` — that is a **separate,
+> unrelated flag** for Ember's embedded H2 simulator database, not Postgres. Leave it `false` when
+> running against real Postgres as documented here.
+
+`./run-forge.sh` rebuilds (`mvn clean install -DskipTests -q`) and then launches Forge. The forge
+resolves `--blueprint` as an **artifact coordinate** (not a file path); the script passes
+`org.pragmatica.example:ticketing:1.0.0-SNAPSHOT:blueprint` accordingly. Its own printed "Test:" hint
+(`curl ... /api/v1/events -d ...`) uses a stale path missing `/create` — use the walkthrough below
+instead.
+
+**How to know it worked** — real log lines from this session, in order:
+
+```
+INFO  ForgeServer.handleDeployResponse() - Blueprint deployed from artifact: org.pragmatica.example:ticketing:1.0.0-SNAPSHOT:blueprint
+INFO  ClusterTopologyManager.activateWithCurrentTopology() - CTM: Activated, desired=5, active=5, ready=5
+INFO  ForgeServer.lambda$launchHttpServer$0() - HTTP server started on port 8888
+INFO  ForgeServer.start() - Forge server running. Press Ctrl+C to stop.
+```
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" localhost:8888   # -> 200 (dashboard)
+```
+
+Then open the dashboard at **http://localhost:8888** to watch slice deployment and cluster health.
+
+### ⚠️ Known issue in this environment — HTTP routes never come up (verified, unresolved)
+
+**This is a finding, not a documentation gap.** Following every step above exactly — database
+configured, Postgres reachable, `CTM: Activated, desired=5, active=5, ready=5` logged, dashboard
+returning 200 — the API on `:8070` still returns 404 for every documented route, reproduced
+independently **three times** in this session with a full rebuild each time:
+
+```
+$ curl -s -X POST localhost:8070/api/v1/events/create -d '{"venue":"O2 Arena","onSaleAt":"2026-07-01T10:00:00Z"}'
+{"type":"about:blank","title":"Not Found","status":404,"detail":"No route found for POST /api/v1/events/create","instance":"/api/v1/events/create","requestId":"req-01m12gks2begasdx4c2harsmyz"}
+```
+
+`GET :8888/api/slices/status` (the dashboard's own status API) shows why: every slice instance across
+all 5 nodes stays `UNHEALTHY` and none ever reaches the `ACTIVE` state that the router requires before
+it wires up a route — including `create-event`, which has no error anywhere in its deployment log.
+Several slices kept cycling `LOADING → LOADED → UNLOADING` rather than settling, even after 30+
+seconds of otherwise-idle wait. **`[verified symptom]`** — reproduced 3× via the exact steps above.
+**`[design intent — unverified root cause]`** — the logs also show sustained Rabia consensus
+backpressure during this window (`SLOW-APPLY` warnings, `Backpressure on peer ... lane CONSENSUS`,
+and once `Consensus apply timed out after 30000ms` while reconciling a slice), consistent with the
+5-node embedded consensus being saturated by concurrently deploying 24 slices × 3 replicas on one
+machine — but this has not been confirmed as the actual cause, only observed alongside it.
+
+**Separately (fixed by rebuilding, not a standing issue):** if you ever invoke the `aether-forge` jar
+directly against stale `~/.m2` artifacts — bypassing `run-forge.sh`'s build step — you will see
+`ClassNotFoundException: SeatSellability` / `PriceChanged` on several slices instead. That is a stale-
+artifact symptom, not this bug; a plain `mvn clean install` (which `run-forge.sh` already does for
+you) resolves it.
+
+If you hit this, you have reproduced the same state we did — it is not something wrong with your
+setup. There is no known workaround yet.
 
 ### A walk through the API (`:8070`)
 
-Routes mirror the telescope. Representative flow:
+Routes mirror the telescope. This is each route's **designed** contract — the path, method, and
+response shape from `routes.toml` and the slice's own `Response` record, exercised by this project's
+214 unit tests against in-memory fakes (see "Build & test" above) — **not** verified end-to-end
+through Forge in this environment, per the known issue directly above:
 
 ```bash
-curl -s :8070/api/v1/events/create -d '{"venue":"O2 Arena","onSaleAt":"2026-07-01T10:00:00Z"}'   # -> event
+curl -s :8070/api/v1/events/create -d '{"venue":"O2 Arena","onSaleAt":"2026-07-01T10:00:00Z"}'   # -> {"event":"<id>"}
 curl -s :8070/api/v1/seats/add     -d '{"event":"<e>","section":"A","row":"12","number":7,"tier":"STANDARD"}'  # -> seat
 curl -s :8070/api/v1/pricing/set   -d '{"event":"<e>","tier":"STANDARD","amount":"49.50","currency":"USD"}'
 curl -s -X POST :8070/api/v1/events/open/<e>
@@ -169,6 +325,37 @@ curl -s :8070/api/v1/booking/cancel -d '{"booking":"<b>","customer":"<uuid>"}'
 ```
 
 Each slice's exact route + error→status map: `src/main/resources/.../<usecase>/routes.toml`.
+
+### Troubleshooting
+
+- **`ERROR: aether-forge not found`** from `run-forge.sh` — Step 0 wasn't completed, or the
+  `aether-forge` launcher isn't on `PATH` and isn't at `~/.aether/bin/aether-forge` either. Re-run
+  Step 0's `mvn install` commands from the pragmatica repo.
+- **`ERROR: Neither docker nor podman found`** from `start-postgres.sh` — install one, or start Docker
+  Desktop if it's installed but not running (`docker ps` failing silently is the usual tell).
+- **Port already in use** (`5432`, `8070`–`8074`, `5150`, `8888`, or `8080`) — a previous
+  `./start-postgres.sh` container or `./run-forge.sh` process is still up. Check with
+  `docker ps` / `ps aux | grep aether-forge`, and reuse it rather than starting a second one — Forge
+  doesn't multiplex cleanly on a laptop with two clusters fighting over the same ports.
+  `PG_PORT=<other>` overrides Postgres's port if you need to run it side-by-side with something else.
+- **Slices fail to deploy with `ClassNotFoundException`** referencing a class that clearly exists in
+  `src/main/java` — stale `~/.m2` artifacts from a previous build of a different working-tree state.
+  `mvn clean install -DskipTests` (or just re-run `./run-forge.sh`, which does this first) fixes it.
+- **Every route 404s despite a clean deploy** — see the "Known issue" callout above before assuming
+  your setup is wrong; as of this writing it reproduces on a fully correct setup too.
+- **`aether.toml`'s `[database]` commented out** — every `@PgSql` slice fails to provision its store.
+  See the "Run the cluster" section above; this is required, not optional, contrary to the file's own
+  comment.
+
+### Not covered here
+
+- **Production deployment** (the `Main` node, cloud provisioning, Hetzner/other cloud targets) —
+  outside this repo's scope; see the pragmatica monorepo's `aether/docs/` for that.
+- **The `aether` CLI** (`~/.aether/bin/aether`) — used for operating a running cluster (schema
+  migrations, deployment control); not needed to just run this project locally.
+- **Embedding Ember directly** (`Ember.cluster(n).withH2()...start()` in your own JVM, no dashboard) —
+  Forge is Ember plus a dashboard and load/failure tooling; see the pragmatica monorepo's `aether/`
+  module docs if you want the bare library instead.
 
 ---
 

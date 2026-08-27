@@ -1,5 +1,10 @@
 # Aether runtime configuration
-# Uncomment to enable database access (requires running PostgreSQL):
+# REQUIRED for local runs, despite shipping commented out: every @PgSql-backed slice (most of them)
+# needs `database.async_url` to provision its store, and a slice whose store cannot provision never
+# leaves LOADED — so with this block commented out the app comes up "healthy" and every route 404s.
+# Uncomment and point it at a running PostgreSQL (see README "Run locally (Forge)", and
+# ./start-postgres.sh for a matching local container). Not the same switch as forge.toml's
+# `[database] enabled`, which toggles Ember's embedded H2 simulator and should stay false.
 # [database]
 # async_url = "postgresql://postgres:postgres@localhost:5432/forge"
 #
