@@ -297,7 +297,8 @@ AETHER CONTEXT (you have no built-in Aether knowledge — follow exactly):
   the local-container bootstrap.
 - `V001__name.sql` needs a **double** underscore.
 - A wrong column/table in a `@Query` **fails the build** (`[PG-VALIDATE]`), not at runtime.
-- DB is off until `[database]` is uncommented in `aether.toml`; this project's key is `async_url`.
+- DB is enabled by default (the `[database]` block ships uncommented in `aether.toml`); this
+  project's key is `async_url`.
 - Never hand-write codecs or SQL row mappers; never throw business exceptions; resources inject via
   the factory's parameters.
 - `jbct-coder` must be briefed on Aether every time (§8).
