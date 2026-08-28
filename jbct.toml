@@ -8,3 +8,9 @@ indentSize = 4
 [lint]
 failOnWarning = false
 # excludePackages = ["some.generated.**"]
+
+[lint.rules]
+# TODO(pragmaticalabs/pragmatica#713): CAUSE-02 pinned to warning until the held 38-site typed-error
+# migration (message()-body cause records -> trailing-message-component records) lands; remove this
+# override with that migration. Freeze ruling: CAUSE-01/02/04 default to error from rc3.
+JBCT-CAUSE-02 = "warning"
