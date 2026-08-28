@@ -377,7 +377,7 @@ mis-validation (§8.4). The single-statement style is a design preference here, 
 
 ## 6. Resources & config (`src/main/resources/resources.toml`)
 Every `@ResourceQualifier` config section a slice references is declared here (the blueprint generator
-validates it at build time). `aether.toml`'s `[database]` block ships commented out; the live resource
+validates it at build time). `aether.toml`'s `[database]` block ships enabled by default; the live resource
 config is `resources.toml`. The complete inventory, in file order — 17 sections:
 - `[database]` with `async_url = postgresql://postgres:postgres@localhost:5432/forge` (+ `[database.pool_config]`).
 - `[seat-sold]`, `[seat-released]`, `[price-changed]` — each `topic_name = "…"` (top-level sections, bare names).

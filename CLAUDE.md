@@ -160,7 +160,7 @@ Reference: `aether-coder` skill `deployment/schema-migrations.md`.
 
 ## 6. Config — `aether.toml`
 
-DB is **disabled by default** (the `[database]` block ships commented out). To enable:
+DB is **enabled by default** (the `[database]` block ships uncommented, per [pragmaticalabs/pragmatica#704](https://github.com/pragmaticalabs/pragmatica/issues/704)):
 
 ```toml
 [database]

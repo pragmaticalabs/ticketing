@@ -240,11 +240,11 @@ PostgreSQL running on port 5432
 On a first run it instead prints `Creating PostgreSQL container...` / `Waiting for PostgreSQL...`
 before the same final block.
 
-> **`aether.toml`'s `[database]` block must be filled in — it is not optional despite the file's own
-> "uncomment to enable" comment.** Every `@PgSql`-backed slice (most of them — see the telescope table
-> above) needs `database.async_url` to provision its store; leave the block commented out (the
-> checked-out default) and those slices fail to deploy. This checkout already has it set to match
-> `start-postgres.sh`'s connection string:
+> **`aether.toml`'s `[database]` block is enabled by default.** Every `@PgSql`-backed slice (most of
+> them — see the telescope table above) needs `database.async_url` to provision its store; a slice
+> whose store cannot provision never leaves `LOADED`, so if this block is missing or commented out
+> those slices fail to deploy. The checked-out default already matches `start-postgres.sh`'s
+> connection string below:
 > ```toml
 > [database]
 > async_url = "postgresql://postgres:postgres@localhost:5432/forge"
@@ -343,9 +343,10 @@ Each slice's exact route + error→status map: `src/main/resources/.../<usecase>
   `mvn clean install -DskipTests` (or just re-run `./run-forge.sh`, which does this first) fixes it.
 - **Every route 404s despite a clean deploy** — see the "Known issue" callout above before assuming
   your setup is wrong; as of this writing it reproduces on a fully correct setup too.
-- **`aether.toml`'s `[database]` commented out** — every `@PgSql` slice fails to provision its store.
-  See the "Run the cluster" section above; this is required, not optional, contrary to the file's own
-  comment.
+- **`aether.toml`'s `[database]` block missing, commented out, or pointing at the wrong
+  `async_url`** — every `@PgSql` slice fails to provision its store. It ships enabled by default; see
+  the "Run the cluster" section above and restore it to match `start-postgres.sh`'s connection
+  string if it was changed.
 
 ### Not covered here
 
