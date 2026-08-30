@@ -150,3 +150,16 @@ log_args = true
 log_result = false
 log_duration = true
 
+# --- Deployment gate ---
+# schema_required governs whether a slice waits for this blueprint's migrations before activating.
+# TRUE is correct here: the platform ships 9 migrations (V001-V009) and every @PgSql store depends
+# on them. It was previously correct only by ACCIDENT -- BlueprintParser defaults the key to `true`
+# when the section is absent, so the value was being supplied by a fallback in another repository
+# rather than stated here. Setting it explicitly makes the demand visible and pins it against a
+# future change to that default.
+#
+# Do NOT set this to false to work around a stuck deploy: it trades a visible hold for silent
+# corruption against an unmigrated database. A migration that is genuinely stuck is cleared with
+# `aether schema retry` or by redeploying the blueprint.
+[deployment]
+schema_required = true

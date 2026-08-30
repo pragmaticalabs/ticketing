@@ -1,0 +1,13 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "url": "/authorize",
+    "bodyPatterns": [ { "matchesJsonPath": "$[?(@.amountMinor == 66600)]" } ]
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "approved": false, "receiptId": "" }
+  }
+}

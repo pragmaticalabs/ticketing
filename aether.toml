@@ -16,3 +16,35 @@ max_lifetime = "30m"
 validation_query = ""
 leak_detection_timeout = "0s"
 io_threads = 0
+
+# Payment gateway for the @Http HttpClient resource in BuyTicket and CancelTicket.
+# WITHOUT this section the blueprint does not deploy at all: deploy-time validation reports
+#   slice 'BuyTicket' requires config section [http] for its HttpClient resource
+# and Forge exits rather than starting degraded. HttpClientConfig exposes no public DEFAULT, so
+# every non-Option component below is mandatory — omitting one fails the same way as omitting the
+# whole section.
+#
+# base_url points at the local stub gateway from ./start-gateway.sh (WireMock, see
+# gateway-stubs/). The slices call POST /authorize, /refund and /void on it; no third-party
+# sandbox implements that contract, which is why this is a stub rather than a real provider.
+[http]
+base_url = "http://localhost:9100"
+connect_timeout = "5s"
+request_timeout = "30s"
+follow_redirects = "NORMAL"
+default_headers = {}
+
+# Notification sender for the @Notify resource in BuyTicket (booking confirmation email).
+# Also mandatory for deploy: 'BuyTicket requires config section [notification]'.
+# The send is best-effort by design — BuyTicket's sendConfirmation ends `.recover(_ -> unit())`
+# (forward error recovery), so a purchase still succeeds with nothing listening on port 1025.
+# Run a local Mailpit/MailHog on that port if you want to SEE the confirmation email.
+[notification]
+backend = "smtp"
+
+[notification.smtp_config]
+host = "localhost"
+port = 1025
+tls_mode = "NONE"
+connect_timeout = "5s"
+command_timeout = "10s"

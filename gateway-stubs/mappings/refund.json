@@ -1,0 +1,9 @@
+{
+  "request": { "method": "POST", "url": "/refund" },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "receiptId": "{{randomValue type='UUID'}}" },
+    "transformers": ["response-template"]
+  }
+}

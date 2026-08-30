@@ -1,0 +1,13 @@
+{
+  "priority": 10,
+  "request": {
+    "method": "POST",
+    "url": "/authorize"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "approved": true, "receiptId": "{{randomValue type='UUID'}}" },
+    "transformers": ["response-template"]
+  }
+}
