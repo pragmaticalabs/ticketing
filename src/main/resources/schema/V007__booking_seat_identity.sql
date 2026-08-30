@@ -35,21 +35,35 @@ ALTER TABLE reservations ADD COLUMN IF NOT EXISTS claim_id UUID;
 UPDATE reservations SET claim_id = id WHERE claim_id IS NULL;
 ALTER TABLE reservations ALTER COLUMN claim_id SET NOT NULL;
 
--- 2. The seat becomes the key. Dropping `id` also drops the primary key defined on it; the explicit
+-- 2. Release the dependency on the key BEFORE re-keying. `bookings.reservation_id` was declared in
+--    V004 as `REFERENCES reservations (id)`, and PostgreSQL refuses to drop a primary key while a
+--    foreign key depends on it:
+--        2BP01: cannot drop constraint reservations_pkey on table reservations
+--               because other objects depend on it
+--    This drop used to sit in step 5, AFTER the re-key, so on any database where V004 actually
+--    created that foreign key the migration failed at the first DROP CONSTRAINT and every slice in
+--    the blueprint was held in LOADED behind a FAILED schema record. It survived unnoticed because
+--    the databases it was exercised against no longer carried the constraint; a first-run install on
+--    an empty database — precisely what a new user has — hits it every time.
+--
+--    Dropping the foreign key is the intended end state either way: a booking records the claim it
+--    was sold under as a historical fact, so rotating a seat's claim must never be blocked by the
+--    history of its past sales.
+ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_reservation_id_fkey;
+
+-- 3. The seat becomes the key. Dropping `id` also drops the primary key defined on it; the explicit
 --    constraint drop above it is belt-and-braces for installations where that key was named.
 ALTER TABLE reservations DROP CONSTRAINT IF EXISTS reservations_pkey;
 ALTER TABLE reservations DROP COLUMN IF EXISTS id;
 ALTER TABLE reservations ADD PRIMARY KEY (seat_id);
 
--- 3. Redundant now that seat_id is the primary key.
+-- 4. Redundant now that seat_id is the primary key.
 DROP INDEX IF EXISTS uq_reservation_seat;
 
--- 4. Supports the orphan reaper: confirmed reservations old enough to have lost their purchase.
+-- 5. Supports the orphan reaper: confirmed reservations old enough to have lost their purchase.
 CREATE INDEX IF NOT EXISTS idx_reservations_orphan ON reservations (created_at) WHERE state = 'confirmed';
 
--- 5. A booking records the claim it was sold under as a historical fact. Dropping the foreign key is
---    the point: rotating a seat's claim must never be blocked by the history of its past sales.
-ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_reservation_id_fkey;
+-- 6. The column rename that goes with the dropped foreign key above.
 ALTER TABLE bookings RENAME COLUMN reservation_id TO reservation_claim_id;
 
 CREATE INDEX IF NOT EXISTS idx_bookings_claim ON bookings (reservation_claim_id);
