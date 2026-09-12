@@ -5,23 +5,28 @@ A complete, runnable realization of the **event-ticketing example** threaded thr
 parse-don't-validate, sealed typed failures; see the [JBCT book](https://leanpub.com/jbct-book)) on the **[Aether](https://github.com/pragmaticalabs/pragmatica/tree/main/aether)** unified runtime. This is the
 posterchild: the book designs the processes; this repo runs them.
 
-> **⚠️ Status — `1.0.0-rc3` is a local build; none of it is on Maven Central.** This project builds
-> and passes its full test suite on **Pragmatica Lite / Aether / JBCT `1.0.0-rc3`** (Java 25). **rc3
-> is not published anywhere** — every rc3 artifact in `~/.m2` came from a local `mvn install` of the
-> `release-1.0.0-rc3` branch of the pragmatica repo. Central's newest published line is still rc2.
-> Three of this project's dependencies have never been published on *any* rc line, so they stay
-> local-install-only even after rc3 ships: **`resource-api`, `resource-notification`, and
-> `resource-interceptors`** — the `org.pragmatica.aether.resource.*` API (`@PgSql`, `@Http`,
-> `@Notify`) plus the interceptor factories. A fresh clone must build the rc3 branch locally first.
+> **⚠️ Status — the `1.0.0-rc3` line IS on Maven Central; three of this repo's dependencies are not,
+> and never have been.** Measured 2026-09-12 against `repo1.maven.org` (not the solr search API, which
+> returns `numFound 0` for these groupIds — a false negative): the rc3 line was published 2026-09-02,
+> and `org.pragmatica-lite:core`, `jbct-cli`, `jbct-maven-plugin` plus **42 of the 68 published
+> `org.pragmatica-lite.aether:*` artifacts — including `slice-api` and `cli` — carry `1.0.0-rc3`.**
+> So **a blanket "build Aether from source" step is no longer required.** The earlier claims here —
+> that rc3 was unpublished, and that Central's newest line was rc2 — were both wrong.
 >
-> **This is tracked as [pragmaticalabs/pragmatica#668](https://github.com/pragmaticalabs/pragmatica/issues/668)**
-> — "GA gate: publish aether artifacts to Maven Central." Until it lands, **every fresh clone of this
-> repo must build the `pragmatica` monorepo from source into `~/.m2` before `mvn install` here can
-> resolve anything under `org.pragmatica-lite:*`** (see Step 0 in "Run locally (Forge)" below). Once
-> #668 ships, that local build step goes away for whatever artifact set it covers — `mvn install` in
-> this repo starts resolving those coordinates from Central instead, the same way `core` and
-> `jbct-maven-plugin` already do at rc2. Watch the issue rather than this README for the exact
-> artifact list and version it lands at.
+> **What is still missing is narrow, and still blocks this repo:** `resource-api`,
+> `resource-notification` and `resource-interceptors` — the `org.pragmatica.aether.resource.*` API
+> (`@PgSql`, `@Http`, `@Notify`) plus the interceptor factories — have **no directory on Central at any
+> version**, not merely no rc3 (verified with `aether/slice-api/` returning 200 as the positive control
+> on the same path; the published `slice-api` and `cli` jars contain no `aether/resource/` classes, so
+> the API was not folded into them either). Because this project uses those annotations, **a fresh
+> clone still needs them installed locally** — but that is a three-artifact gap now, not the whole
+> monorepo. See Step 0 in "Run locally (Forge)" below.
+>
+> **Tracked as [pragmaticalabs/pragmatica#668](https://github.com/pragmaticalabs/pragmatica/issues/668)**
+> — "GA gate: publish aether artifacts to Maven Central — resource-api/resource-http (and full
+> dependency closure) unavailable at any 1.0.0 version" — **still open as of 2026-09-12.** Once it
+> lands, the local step goes away for whatever artifact set it covers. Watch the issue rather than this
+> README for the exact artifact list and version.
 >
 > Design rationale and the full process catalog live in [`docs/DESIGN.md`](docs/DESIGN.md).
 
@@ -170,11 +175,15 @@ the real output observed, not a mock-up.
 | Docker or Podman | any recent version | Docker 29.3.0 | `start-postgres.sh` auto-detects either |
 | git | any | — | to clone `pragmatica` in Step 0 |
 
-### Step 0 — build the Aether runtime from source
+### Step 0 — build the unpublished Aether artifacts from source
 
-**Required today** because of [#668](https://github.com/pragmaticalabs/pragmatica/issues/668) (see the
-Status note above): nothing this project needs under `org.pragmatica-lite:*` is on Maven Central at
-rc3, so `~/.m2` has to be populated by building the monorepo yourself.
+**Still required today** because of [#668](https://github.com/pragmaticalabs/pragmatica/issues/668) (see
+the Status note above) — but for a narrower reason than this section used to give. Most of what this
+project needs **is** on Central at rc3; `resource-api`, `resource-notification` and
+`resource-interceptors` are not published at any version, and they are not separately resolvable, so
+`~/.m2` still has to be populated from a local build. The full `mvn install` below is the path that is
+actually verified here; a narrower `-pl` build of just those three modules and their parents has **not**
+been tested, so it is not recommended in place of it.
 
 ```bash
 git clone https://github.com/pragmaticalabs/pragmatica.git ~/IdeaProjects/pragmatica
