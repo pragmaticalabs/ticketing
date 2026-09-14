@@ -5,36 +5,31 @@ A complete, runnable realization of the **event-ticketing example** threaded thr
 parse-don't-validate, sealed typed failures; see the [JBCT book](https://leanpub.com/jbct-book)) on the **[Aether](https://github.com/pragmaticalabs/pragmatica/tree/main/aether)** unified runtime. This is the
 posterchild: the book designs the processes; this repo runs them.
 
-> **⚠️ Status — the `1.0.0-rc3` line IS on Maven Central; three of this repo's dependencies are not,
-> and never have been.** Measured 2026-09-12 against `repo1.maven.org` (not the solr search API, which
-> returns `numFound 0` for these groupIds — a false negative): the rc3 line was published 2026-09-02,
-> and `org.pragmatica-lite:core`, `jbct-cli`, `jbct-maven-plugin` plus **42 of the 68 published
-> `org.pragmatica-lite.aether:*` artifacts — including `slice-api` and `cli` — carry `1.0.0-rc3`.**
-> So **a blanket "build Aether from source" step is no longer required.** The earlier claims here —
-> that rc3 was unpublished, and that Central's newest line was rc2 — were both wrong.
+> **✅ Status — every dependency of this project now resolves from Maven Central. There is no
+> source-build step.** Verified 2026-09-14, 21:13Z: the last 15 missing `org.pragmatica-lite.aether`
+> artifacts were published, and this project was then built and run end to end in a bare
+> `ubuntu:24.04` container **against a local Maven repository asserted empty (0 files) beforehand**,
+> resolving everything from Central. `_remote.repositories` reads `resource-api-1.0.0-rc3.jar>central=`
+> — the same marker as a sibling that was always published.
 >
-> **What is still missing is narrow, and still blocks this repo:** `resource-api`,
-> `resource-notification` and `resource-interceptors` — the `org.pragmatica.aether.resource.*` API
-> (`@PgSql`, `@Http`, `@Notify`) plus the interceptor factories — have **no directory on Central at any
-> version**, not merely no rc3 (verified with `aether/slice-api/` returning 200 as the positive control
-> on the same path; the published `slice-api` and `cli` jars contain no `aether/resource/` classes, so
-> the API was not folded into them either). Because this project uses those annotations, **a fresh
-> clone still needs them installed locally** — but that is a three-artifact gap now, not the whole
-> monorepo. See Step 0 in "Run locally (Forge)" below.
+> **This is the first time this project has been buildable by anyone outside its authors' machines.**
+> `git clone` + `mvn install` is now the whole story.
 >
-> **Tracked as [pragmaticalabs/pragmatica#668](https://github.com/pragmaticalabs/pragmatica/issues/668)**
-> — "GA gate: publish aether artifacts to Maven Central — resource-api/resource-http (and full
-> dependency closure) unavailable at any 1.0.0 version" — **still open as of 2026-09-12.** Once it
-> lands, the local step goes away for whatever artifact set it covers. Watch the issue rather than this
-> README for the exact artifact list and version.
+> *Historical note, kept because the failure mode is worth more than the fix.* Until that publish,
+> `resource-api`, `resource-notification` and `resource-interceptors` were unpublished **at every
+> version** — not an oversight but a switch: `aether/resource/pom.xml` set `<skipPublishing>true</…>`
+> inside `<build><plugins>` rather than `<build><pluginManagement>`, so every child of the `resource`
+> aggregator inherited it (15 artifacts;
+> [#1211](https://github.com/pragmaticalabs/pragmatica/issues/1211),
+> [#668](https://github.com/pragmaticalabs/pragmatica/issues/668)). **Nobody noticed for months
+> because every developer build resolved them from a populated `~/.m2`** — on the machine where this
+> was diagnosed, `resource-api:1.0.0-rc3` had been installed on 2026-09-01, *one day before* the rc3
+> Central publish. Every local build went green and proved nothing about what a stranger would get.
+> **That is why `docker/verify-from-scratch.sh` asserts the local repository is empty before it
+> builds**, and why it mounts no `~/.m2` from the host: a clean-room check with a warm cache measures
+> the wrong thing while looking exactly like success.
 >
-> **Why the gap exists (measured 2026-09-14):** it is switched off, not missing.
-> `aether/resource/pom.xml` sets `<skipPublishing>true</skipPublishing>` inside `<build><plugins>`
-> rather than `<build><pluginManagement>`, so **every** child of the `resource` aggregator inherits
-> it — 13 submodules plus the aggregator pom, **14 artifacts**, of which this project needs 3. The
-> same line is unchanged on the rc4 line, so publishing rc4 without touching it reproduces the gap.
->
-> **This repo now runs end to end.** See "Run locally (Forge)" — and read "Re-running Forge" before
+> **This repo runs end to end.** See "Run locally (Forge)" — and read "Re-running Forge" before
 > your second start, which is where this README used to have an unexplained bug.
 >
 > Design rationale and the full process catalog live in [`docs/DESIGN.md`](docs/DESIGN.md).
@@ -127,11 +122,8 @@ un-reusable) and **converting a hold into a purchase** (which had always failed)
 
 ## Build & test
 
-> **Prerequisite (see the Status note above):** the `1.0.0-rc3` line **is** on Maven Central — what
-> is missing is three artifacts, not the line. `resource-api`, `resource-notification` and
-> `resource-interceptors` have never been published on any rc line and can only come from a local
-> build of the pragmatica repo at tag `v1.0.0-rc3`. Step 0 below is a ~1-minute three-module build,
-> not a full monorepo install.
+> **No prerequisite build.** Everything this project depends on is on Maven Central at
+> `1.0.0-rc3`. Clone and build; Maven fetches the rest.
 
 ```bash
 mvn clean install         # compiles (slice-processor + pg-codegen), runs 214 unit tests, generates target/blueprint.toml (24 slices)
@@ -182,58 +174,16 @@ the real output observed, not a mock-up.
 | JDK | 25+ | Homebrew OpenJDK 25.0.2 | `pom.xml` → `maven.compiler.release=25` |
 | Maven | 3.9+ (no enforced floor in this pom; use a recent 3.9.x) | 3.9.12 | practical — untested below this |
 | Docker or Podman | any recent version | Docker 29.3.0 | `start-postgres.sh` auto-detects either |
-| git | any | — | to clone `pragmatica` in Step 0 |
+| git | any | — | to clone this repository |
 
-### Step 0 — build the unpublished Aether artifacts from source
+### Step 0 — install Forge
 
-**Still required today** because of [#668](https://github.com/pragmaticalabs/pragmatica/issues/668) (see
-the Status note above), but the build is small. Most of what this project needs **is** on Central at
-rc3; `resource-api`, `resource-notification` and `resource-interceptors` are not published at any
-version and are not separately resolvable, so they have to come from a local build.
+**There is no longer an Aether source build.** Every `org.pragmatica-lite` and
+`org.pragmatica-lite.aether` artifact this project needs is on Maven Central at `1.0.0-rc3`,
+including the `resource-*` family that used to force one. Maven resolves them for you.
 
-The **narrow `-pl` build below is the verified path** — measured 2026-09-14 in a bare `ubuntu:24.04`
-container against a genuinely empty local repository: **36.5s for the bootstrap phase + 8.7s for the
-three resource modules = ~45s total**, everything else resolving from Central. An earlier revision of
-this section said the narrow build was untested and recommended a full `mvn install` of the monorepo
-instead; that is no longer true and is no longer necessary.
-
-Note the tag: **`v1.0.0-rc3`, not a branch.** There is no `release-1.0.0-rc3` branch on origin — a
-fresh clone that tries to check one out dies here.
-
-```bash
-git clone --depth 1 --branch v1.0.0-rc3 https://github.com/pragmaticalabs/pragmatica.git ~/IdeaProjects/pragmatica
-cd ~/IdeaProjects/pragmatica
-
-# 1. bootstrap the annotation processors / Maven plugins the rest of the build needs
-mvn install -DskipTests -Djbct.skip=true -pl jbct/jbct-maven-plugin,jbct/slice-processor,aether/pg-tools/pg-codegen -am
-
-# 2. build ONLY the three unpublished artifacts (and their in-reactor parents)
-mvn install -DskipTests -Djbct.skip=true -pl aether/resource/api,aether/resource/notification,aether/resource/interceptors -am
-```
-
-These are steps 1 and 3 of the monorepo's own `./build.sh` (6 steps total) — the only two an external
-consumer needs; the rest are the project's own lint gate and test-blueprint builds.
-
-> **Do not run `mvn verify` anywhere in the pragmatica repo.** Its Failsafe integration suite includes
-> a Hetzner Cloud test that binds to the real Hetzner API and provisions a paid server if
-> `HCLOUD_TOKEN` is set in your environment. `mvn install` (used above) never touches it.
-
-**On timing:** the two commands above were measured at **36.5s + 8.7s** from a genuinely empty local
-repository (a fresh container, no `~/.m2`, no `target/`), on a 4-CPU machine. That is a true cold
-figure, not a warm-cache one. Most of it is downloading the Central dependencies the two phases need.
-
-**How to know it worked:**
-
-```bash
-ls ~/.m2/repository/org/pragmatica-lite/aether/resource-api/
-ls ~/.m2/repository/org/pragmatica-lite/aether/resource-notification/
-ls ~/.m2/repository/org/pragmatica-lite/aether/resource-interceptors/
-```
-
-Each should list a `1.0.0-rc3` directory holding a `.jar`. Those three are the whole point of Step 0.
-
-**Forge itself does not come from this build.** Install it from the published release archives —
-self-contained, with a bundled JRE, so this step needs no JDK of its own:
+The one thing Central does not give you is the Forge binary. Install it from the published release
+archives — self-contained, with a bundled JRE, so this needs no JDK of its own:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/pragmaticalabs/pragmatica/main/install.sh | sh -s -- --version 1.0.0-rc3
@@ -241,6 +191,11 @@ curl -fsSL https://raw.githubusercontent.com/pragmaticalabs/pragmatica/main/inst
 
 That installs `aether`, `aether-node` and `aether-forge` into `~/.aether/bin`, which is where
 `run-forge.sh` looks for them.
+
+> **If you are looking for the monorepo build step that used to be here:** it was removed on
+> 2026-09-14 when the 15 outstanding artifacts were published. Nothing about your project setup
+> changed — that step existed only to work around
+> [#1211](https://github.com/pragmaticalabs/pragmatica/issues/1211).
 
 Back in this repo, confirm resolution actually works:
 
@@ -480,9 +435,10 @@ Each slice's exact route + error→status map: `src/main/resources/.../<usecase>
 
 ### Troubleshooting
 
-- **`ERROR: aether-forge not found`** from `run-forge.sh` — Step 0 wasn't completed, or the
-  `aether-forge` launcher isn't on `PATH` and isn't at `~/.aether/bin/aether-forge` either. Re-run
-  Step 0's `mvn install` commands from the pragmatica repo.
+- **`ERROR: aether-forge not found`** from `run-forge.sh` — Forge isn't installed, or its launcher
+  isn't on `PATH` and isn't at `~/.aether/bin/aether-forge` either. Re-run the installer from
+  "Step 0 — install Forge" above. Note this is the *only* thing that still comes from outside Maven
+  Central; a failure here is never a missing dependency.
 - **`ERROR: Neither docker nor podman found`** from `start-postgres.sh` — install one, or start Docker
   Desktop if it's installed but not running (`docker ps` failing silently is the usual tell).
 - **Port already in use** (`5432`, `8070`–`8074`, `5150`, `8888`, or `8080`) — a previous
@@ -514,16 +470,17 @@ Each slice's exact route + error→status map: `src/main/resources/.../<usecase>
 ./docker/verify-from-scratch.sh
 ```
 
-Builds `ubuntu:24.04` + JDK 25 + Maven, starts PostgreSQL, performs Step 0, installs Forge, builds
+Builds `ubuntu:24.04` + JDK 25 + Maven, starts PostgreSQL, installs Forge, builds
 this project, boots the cluster and **asserts an HTTP status on every documented route**, ending
 with a purchase that must return a receipt and a no-credential call that must be refused. It prints
 `ALL CHECKS PASSED` or names the step that failed.
 
-It deliberately mounts **no `~/.m2` and no `~/.aether` from the host.** That is the entire point: on
-a developer machine this project's three unpublished dependencies are usually already installed, so
-a local build goes green whether or not the documented sequence is correct. Running from an empty
-image is what makes this README falsifiable — anything it omits fails here instead of being quietly
-supplied by the machine.
+It deliberately mounts **no `~/.m2` and no `~/.aether` from the host**, and **asserts the local
+Maven repository is empty (0 files) before building**. That assertion is the entire point, and its
+absence is what hid the dependency gap for months: three artifacts had been sitting in the
+developers' `~/.m2` since the day before the rc3 Central publish, so every local build resolved them
+and went green while a stranger's build could not work at all. A clean-room check with a warm cache
+measures the wrong thing and looks exactly like success.
 
 The app container shares the PostgreSQL container's network namespace, so `localhost:5432`,
 `localhost:9100` and the app's own ports mean the same thing inside the container as they do on a
