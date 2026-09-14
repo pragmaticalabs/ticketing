@@ -49,30 +49,59 @@ tls_mode = "NONE"
 connect_timeout = "5s"
 command_timeout = "10s"
 
-# App HTTP security. WITHOUT this block 13 of the 19 routed slices refuse every request with
-#   401 "Route requires authentication but no security mode is configured"
-# and only the 6 `public` read slices answer. Forge reads this section from the sibling aether.toml
-# and applies it ONLY when the key map is non-empty, so omitting the block (not merely leaving the
-# keys blank) is what leaves every node on the deny-unless-public validator.
+# ============================================================================
+# [app-http] -- APP HTTP SECURITY. SHIPPED DISABLED. MANDATORY FOR THE WALKTHROUGH.
+# ============================================================================
 #
-# `roles` is what a route's `role:admin` / `role:operator` label is matched against;
-# `authorization_role` is the separate management-plane level, and ADMIN is what Forge itself
-# presents when it calls its own control-plane routes.
+# WHAT IT IS
+# `[app-http]` configures authentication for the application HTTP port (:8070) -- the mode the node
+# accepts credentials in, and the keys it accepts. It is read by Forge from this file, the sibling
+# `aether.toml` next to `forge.toml`.
 #
-# THIS DEMO SHIPS A DELIBERATELY WORTHLESS KEY so the walkthrough runs out of the box. The value
-# is named to be unmistakable -- it cannot be pasted into a real deployment without the reader
-# noticing, which is the point: a credential that announces its own worthlessness is safe, a
-# plausible-looking one is not, however well commented. This repository is PUBLIC, so the risk
-# being managed here is not that this key is valuable -- it is that a reader copies the PATTERN
-# into something that is.
+# WHY YOU NEED IT
+# 13 of this project's 19 routed slices declare `role:admin`, `authenticated` or `role:operator` in
+# their `routes.toml`. Without this block every one of them answers:
 #
-# THIS IS A LOCAL DEVELOPMENT CREDENTIAL AND NOTHING ELSE. It is committed in plain text so that it
-# can never be mistaken for a secret. ConfigLoader reads AETHER_API_KEYS ahead of any TOML, so a
-# real deployment supplies credentials by environment and never edits this file.
-[app-http]
-security_mode = "api-key"
-
-[app-http.api-keys.local-dev-insecure-do-not-use]
-name = "dev-admin"
-roles = ["admin", "operator", "user"]
-authorization_role = "ADMIN"
+#     401  {"detail":"Route requires authentication but no security mode is configured"}
+#
+# Only the 6 `public` read slices respond. The documented walkthrough begins with
+# `POST /api/v1/events/create`, which is `role:admin` -- so it FAILS ON ITS FIRST STEP with this
+# block disabled. That is not a misconfiguration on your part; it is this file shipping inert.
+#
+# Note the enabling condition precisely: Forge applies this section ONLY when the resulting key map
+# is NON-EMPTY. Leaving the block present with no keys is equivalent to omitting it -- every node
+# stays on the deny-unless-public validator. Commenting it out, as shipped, has the same effect.
+#
+# HOW TO ENABLE IT
+# Delete the leading "# " from each line between the two ENABLE markers below. Nothing else in this
+# file needs to change, and no other file does either. Then pass the key on every non-public call:
+#
+#     curl -H "X-API-Key: local-dev-insecure-do-not-use" ...
+#
+# For anything that is not a local demo, do NOT uncomment these keys. Set `AETHER_API_KEYS` in the
+# environment instead: `ConfigLoader` reads it AHEAD of any TOML, so a real deployment never edits
+# this file. Format is `key:name:role1,role2:AUTHZ_ROLE`, semicolon-separated for several.
+#
+# WHAT THE FIELDS MEAN
+# `security_mode` is one of `api-key` (the `X-API-Key` header), `jwt` (a Bearer token with JWKS
+# validation) or `none`. `roles` is the set a route's `role:admin` / `role:operator` label is
+# matched against. `authorization_role` is the SEPARATE management-plane level -- ADMIN is what
+# Forge itself presents when calling its own control-plane routes, so an ADMIN-capable key must
+# exist or Forge cannot drive the cluster it just started.
+#
+# ABOUT THIS KEY
+# The demo's key is DELIBERATELY WORTHLESS and named to be unmistakable. It cannot be pasted into a
+# real deployment without the reader noticing, which is the point: a credential that announces its
+# own worthlessness is safe, a plausible-looking one is not, however well commented. This repository
+# is PUBLIC, so the risk being managed is not that this key is valuable -- it is that a reader copies
+# the PATTERN into something that is.
+#
+# --- ENABLE BELOW ---
+# [app-http]
+# security_mode = "api-key"
+#
+# [app-http.api-keys.local-dev-insecure-do-not-use]
+# name = "dev-admin"
+# roles = ["admin", "operator", "user"]
+# authorization_role = "ADMIN"
+# --- ENABLE ABOVE ---
