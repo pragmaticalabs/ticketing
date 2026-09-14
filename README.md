@@ -28,6 +28,15 @@ posterchild: the book designs the processes; this repo runs them.
 > lands, the local step goes away for whatever artifact set it covers. Watch the issue rather than this
 > README for the exact artifact list and version.
 >
+> **Why the gap exists (measured 2026-09-14):** it is switched off, not missing.
+> `aether/resource/pom.xml` sets `<skipPublishing>true</skipPublishing>` inside `<build><plugins>`
+> rather than `<build><pluginManagement>`, so **every** child of the `resource` aggregator inherits
+> it — 13 submodules plus the aggregator pom, **14 artifacts**, of which this project needs 3. The
+> same line is unchanged on the rc4 line, so publishing rc4 without touching it reproduces the gap.
+>
+> **This repo now runs end to end.** See "Run locally (Forge)" — and read "Re-running Forge" before
+> your second start, which is where this README used to have an unexplained bug.
+>
 > Design rationale and the full process catalog live in [`docs/DESIGN.md`](docs/DESIGN.md).
 
 ---
@@ -118,11 +127,11 @@ un-reusable) and **converting a hold into a purchase** (which had always failed)
 
 ## Build & test
 
-> **Prerequisite (see the Status note above):** the `1.0.0-rc3` line is **not on Maven Central at
-> all**. Build and `mvn install` the `release-1.0.0-rc3` branch of the pragmatica repo first; the
-> three `resource-*` artifacts (`resource-api`, `resource-notification`, `resource-interceptors`)
-> have never been published on any rc line and can only come from that local build
-> (`mvn install` under `aether/resource`).
+> **Prerequisite (see the Status note above):** the `1.0.0-rc3` line **is** on Maven Central — what
+> is missing is three artifacts, not the line. `resource-api`, `resource-notification` and
+> `resource-interceptors` have never been published on any rc line and can only come from a local
+> build of the pragmatica repo at tag `v1.0.0-rc3`. Step 0 below is a ~1-minute three-module build,
+> not a full monorepo install.
 
 ```bash
 mvn clean install         # compiles (slice-processor + pg-codegen), runs 214 unit tests, generates target/blueprint.toml (24 slices)
@@ -178,21 +187,28 @@ the real output observed, not a mock-up.
 ### Step 0 — build the unpublished Aether artifacts from source
 
 **Still required today** because of [#668](https://github.com/pragmaticalabs/pragmatica/issues/668) (see
-the Status note above) — but for a narrower reason than this section used to give. Most of what this
-project needs **is** on Central at rc3; `resource-api`, `resource-notification` and
-`resource-interceptors` are not published at any version, and they are not separately resolvable, so
-`~/.m2` still has to be populated from a local build. The full `mvn install` below is the path that is
-actually verified here; a narrower `-pl` build of just those three modules and their parents has **not**
-been tested, so it is not recommended in place of it.
+the Status note above), but the build is small. Most of what this project needs **is** on Central at
+rc3; `resource-api`, `resource-notification` and `resource-interceptors` are not published at any
+version and are not separately resolvable, so they have to come from a local build.
+
+The **narrow `-pl` build below is the verified path** — measured 2026-09-14 in a bare `ubuntu:24.04`
+container against a genuinely empty local repository: **36.5s for the bootstrap phase + 8.7s for the
+three resource modules = ~45s total**, everything else resolving from Central. An earlier revision of
+this section said the narrow build was untested and recommended a full `mvn install` of the monorepo
+instead; that is no longer true and is no longer necessary.
+
+Note the tag: **`v1.0.0-rc3`, not a branch.** There is no `release-1.0.0-rc3` branch on origin — a
+fresh clone that tries to check one out dies here.
 
 ```bash
-git clone https://github.com/pragmaticalabs/pragmatica.git ~/IdeaProjects/pragmatica
+git clone --depth 1 --branch v1.0.0-rc3 https://github.com/pragmaticalabs/pragmatica.git ~/IdeaProjects/pragmatica
 cd ~/IdeaProjects/pragmatica
-git checkout release-1.0.0-rc3
 
-# bootstrap the annotation processors / Maven plugins the rest of the build needs, then install everything
+# 1. bootstrap the annotation processors / Maven plugins the rest of the build needs
 mvn install -DskipTests -Djbct.skip=true -pl jbct/jbct-maven-plugin,jbct/slice-processor,aether/pg-tools/pg-codegen -am
-mvn install -DskipTests
+
+# 2. build ONLY the three unpublished artifacts (and their in-reactor parents)
+mvn install -DskipTests -Djbct.skip=true -pl aether/resource/api,aether/resource/notification,aether/resource/interceptors -am
 ```
 
 These are steps 1 and 3 of the monorepo's own `./build.sh` (6 steps total) — the only two an external
@@ -202,23 +218,29 @@ consumer needs; the rest are the project's own lint gate and test-blueprint buil
 > a Hetzner Cloud test that binds to the real Hetzner API and provisions a paid server if
 > `HCLOUD_TOKEN` is set in your environment. `mvn install` (used above) never touches it.
 
-**On timing:** this was verified to *work* (a clean `mvn install -DskipTests` against a warm `~/.m2`
-completed in well under a minute), but that number is **not** a true cold-cache figure — this
-environment's local repository and `target/` directories were already populated from prior builds. A
-genuine from-zero build (empty `~/.m2`, no `target/`) compiles the full `core` + `aether` + `jbct`
-tree and will take meaningfully longer; budget several minutes on first run rather than trusting the
-warm-cache number.
+**On timing:** the two commands above were measured at **36.5s + 8.7s** from a genuinely empty local
+repository (a fresh container, no `~/.m2`, no `target/`), on a 4-CPU machine. That is a true cold
+figure, not a warm-cache one. Most of it is downloading the Central dependencies the two phases need.
 
 **How to know it worked:**
 
 ```bash
 ls ~/.m2/repository/org/pragmatica-lite/aether/resource-api/
-ls ~/.m2/repository/org/pragmatica-lite/aether/forge-core/
+ls ~/.m2/repository/org/pragmatica-lite/aether/resource-notification/
+ls ~/.m2/repository/org/pragmatica-lite/aether/resource-interceptors/
 ```
 
-Both should list a `1.0.0-rc3` directory. If `forge-core` is missing, note it lives at
-`aether/forge-core/` in the monorepo, **not** `aether/forge/forge-core/` — a reasonable-looking but
-wrong path if you're hunting for it manually.
+Each should list a `1.0.0-rc3` directory holding a `.jar`. Those three are the whole point of Step 0.
+
+**Forge itself does not come from this build.** Install it from the published release archives —
+self-contained, with a bundled JRE, so this step needs no JDK of its own:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pragmaticalabs/pragmatica/main/install.sh | sh -s -- --version 1.0.0-rc3
+```
+
+That installs `aether`, `aether-node` and `aether-forge` into `~/.aether/bin`, which is where
+`run-forge.sh` looks for them.
 
 Back in this repo, confirm resolution actually works:
 
@@ -229,8 +251,10 @@ mvn clean install -DskipTests -q   # should succeed silently; this is what run-f
 ### Run the cluster
 
 ```bash
+rm -rf ~/.aether/forge-data         # REQUIRED before any re-run -- see "Re-running Forge" below
 ./start-postgres.sh                 # PostgreSQL 17 (db=forge); Aether applies src/main/resources/schema on deploy
-python3 scripts/stub-gateway.py &   # stub payment gateway on :9100 (BuyTicket's @Http target)
+./start-gateway.sh                  # stub payment gateway on :9100 (BuyTicket's @Http target), WireMock + gateway-stubs/
+#   ... or, with no WireMock available:  python3 scripts/stub-gateway.py &
 # optional: a MailHog/Mailpit SMTP sink on :1025 captures @Notify mail — notifications are FER, optional
 ./run-forge.sh                      # rebuilds the slice + 5-node cluster; deploys the blueprint BY COORDINATE; app on :8070
 ```
@@ -283,7 +307,115 @@ curl -s -o /dev/null -w "%{http_code}\n" localhost:8888   # -> 200 (dashboard)
 
 Then open the dashboard at **http://localhost:8888** to watch slice deployment and cluster health.
 
-### ⚠️ Known issue in this environment — HTTP routes never come up (verified, unresolved)
+### Authentication — required, and not optional for most of the API
+
+**13 of the 19 routed slices refuse every request until `aether.toml` declares a credential.** The
+six `public` read slices work without one; everything labelled `authenticated`, `role:admin` or
+`role:operator` answers:
+
+```json
+{"status":401,"detail":"Route requires authentication but no security mode is configured"}
+```
+
+That is not a misconfiguration on your side — it is what an embedded cluster does when no key map is
+supplied. Forge reads `[app-http]` from the sibling `aether.toml` and applies it **only when the key
+map is non-empty**, so a file without the block leaves every node on the deny-unless-public
+validator. The shipped `aether.toml` carries the block below; it exists so the walkthrough can run.
+
+```toml
+[app-http]
+security_mode = "api-key"
+
+[app-http.api-keys.local-dev-insecure-do-not-use]
+name = "dev-admin"
+roles = ["admin", "operator", "user"]
+authorization_role = "ADMIN"
+```
+
+Pass it as `-H "X-API-Key: local-dev-insecure-do-not-use"` on every non-public call. **This key is a local
+development credential and nothing else** — it is committed in plain text precisely so that it can
+never be mistaken for a secret. `ConfigLoader` reads `AETHER_API_KEYS` ahead of any TOML, so a real
+deployment supplies credentials by environment and never edits this file.
+
+### ⚠️ Re-running Forge — delete `forge-data` first, or the cluster wedges
+
+**This is the single most important operational fact in this document, and it is the root cause of
+what this README previously reported as an unfixable bug.**
+
+Forge persists cluster state under `~/.aether/forge-data`. Starting Forge again over the state of a
+previous run leaves the deployment reconciler working from instance counts that no longer describe
+reality — it observes, in one tick, artifacts both above and below their desired replica count:
+
+```
+RECONCILIATION_SCALE_DOWN artifact=...acquire-hold currentInstances=4 desiredInstances=3
+RECONCILIATION_SCALE_UP   artifact=...check-hold   currentInstances=2 desiredInstances=3
+```
+
+The corrections it issues then race each other. `UNLOAD` commands time out
+(`Consensus apply timed out after 30000ms`), an `UNLOAD` removes a slice while its activation is
+still in flight (`state is ACTIVATE but not found in SliceStore`), and that race is classified
+terminally — `Deterministic failure ... — will NOT retry`. Nothing retries it, so the cluster does
+not recover. It **wedges**: measured here, 11 consecutive samples over 110s reported a byte-identical
+`ACTIVE=70, LOADING=6, UNLOADING=3, ACTIVATE=1` while six of the nineteen routes stayed 404.
+
+So:
+
+```bash
+rm -rf ~/.aether/forge-data     # before every ./run-forge.sh
+```
+
+With `forge-data` removed and nothing else changed, the same 5-node config converges and the whole
+walkthrough below passes. Verified 2026-09-14 in a bare `ubuntu:24.04` container.
+
+**A route can be 404 while its slice is `ACTIVE`.** `ticketing-buy-ticket` was observed with all
+three instances `ACTIVE` and `POST /api/v1/booking/buy` returning 404 — route publication is not
+repaired once lost. Do not use slice state to conclude anything about route availability, in either
+direction.
+
+### ⚠️ Known issue — cross-slice facts are not delivered (verified symptom, cause unknown)
+
+**The pub-sub fact path does not work in this deployment.** After a **successful** purchase
+(`POST /api/v1/booking/buy` → 200 with a booking, ticket and receipt), the availability read model
+never converges: `GET /api/v1/availability/seats/<seat>` still answers `"available"` after 90s of
+polling, and **both** projection tables — `seat_availability` and `price_view` — are **empty (0
+rows)** while the write side holds the bookings and tickets the saga created.
+
+What is established:
+- The write path is correct: the `reservations` row reads `state = confirmed`.
+- The consumer slices are up: `ProjectSeatSold` and `MarkSeatSold` both report 3/3 `ACTIVE`.
+- The wiring is correct in the artifacts: `BuyTicket.manifest` carries
+  `publish.topic.0.topicName=seat-sold` and `ProjectSeatSold.manifest` carries
+  `reactive.0.category=subscription` / `reactive.0.topicName=seat-sold`.
+- Neither the five fact consumers nor the 60s `SweepHolds` schedule ever produced a single
+  interceptor log line, though every one declares one at `INFO` in `resources.toml`.
+- `SweepHolds` **does** run when invoked over HTTP. So the slice bodies are fine; it is the
+  reactive trigger path — subscriptions and scheduling alike — that never fires.
+
+What was checked and **excluded**: the `system:cluster-events` stream does log offset gaps and
+rejected batches, but those are confined to that one system stream and its backfill completes
+(`applied 4 events, self CAUGHT_UP`). It is not the cause.
+
+**Root cause unknown.** This is a real defect and it is not the same thing as the `forge-data` issue
+above — it reproduces on a cleanly converged cluster.
+
+### Historical note — the earlier "HTTP routes never come up" report
+
+> **Superseded 2026-09-14 — kept because the observation was real and the diagnosis was not.** The
+> symptom below was genuine. Its stated cause was wrong in two specific ways, both worth recording:
+>
+> 1. **"every slice instance stays `UNHEALTHY`" is not a symptom.** `UNHEALTHY` is a *rendering* of
+>    `state != ACTIVE` — the whole rc3 tree contains exactly two occurrences of the string, both the
+>    same ternary (`inst.state() == SliceState.ACTIVE ? "HEALTHY" : "UNHEALTHY"`). There is no health
+>    field, no probe, no threshold. `LOADING`, `ROUTING` and `ACTIVATING` all render identically, so
+>    the dashboard was restating "not ACTIVE yet", not reporting ill health.
+> 2. **"none ever reaches the `ACTIVE` state that the router requires before it wires up a route"**
+>    inverts the actual order. Routes are published during `ROUTING`, *before* `ACTIVE` is set, and
+>    the HTTP layer never consults slice state at all. A 404 therefore means the activation chain
+>    never reached route publication — and, as recorded above, a fully `ACTIVE` slice can still 404.
+>
+> The real cause was stale `~/.aether/forge-data` from the preceding run — which is exactly why
+> "reproduced three times with a full rebuild each time" kept reproducing it: rebuilding the *slice*
+> does not clear the *cluster state*, so each re-run inherited the wedge. See "Re-running Forge" above.
 
 **This is a finding, not a documentation gap.** Following every step above exactly — database
 configured, Postgres reachable, `CTM: Activated, desired=5, active=5, ready=5` logged, dashboard
@@ -317,20 +449,29 @@ setup. There is no known workaround yet.
 
 ### A walk through the API (`:8070`)
 
-Routes mirror the telescope. This is each route's **designed** contract — the path, method, and
-response shape from `routes.toml` and the slice's own `Response` record, exercised by this project's
-214 unit tests against in-memory fakes (see "Build & test" above) — **not** verified end-to-end
-through Forge in this environment, per the known issue directly above:
+Routes mirror the telescope. **Every call below was run end to end through Forge on 2026-09-14** in
+a bare `ubuntu:24.04` container and returned the status shown; this is observed output, not a
+designed contract. Non-public routes need the API key from "Authentication" above.
 
 ```bash
-curl -s :8070/api/v1/events/create -d '{"venue":"O2 Arena","onSaleAt":"2026-07-01T10:00:00Z"}'   # -> {"event":"<id>"}
-curl -s :8070/api/v1/seats/add     -d '{"event":"<e>","section":"A","row":"12","number":7,"tier":"STANDARD"}'  # -> seat
-curl -s :8070/api/v1/pricing/set   -d '{"event":"<e>","tier":"STANDARD","amount":"49.50","currency":"USD"}'
-curl -s -X POST :8070/api/v1/events/open/<e>
-curl -s :8070/api/v1/booking/buy   -d '{"customer":"<uuid>","event":"<e>","seat":"<s>","tier":"STANDARD"}'
-curl -s :8070/api/v1/pricing/quote/<e>/STANDARD          # authoritative quote
-curl -s :8070/api/v1/availability/seats/<s>              # 'sold' after SeatSold propagates
-curl -s :8070/api/v1/booking/cancel -d '{"booking":"<b>","customer":"<uuid>"}'
+K='X-API-Key: local-dev-insecure-do-not-use'
+
+curl -s -H "$K" :8070/api/v1/events/create -d '{"venue":"O2 Arena","onSaleAt":"2026-07-01T10:00:00Z"}'   # -> {"event":"<id>"}
+curl -s -H "$K" :8070/api/v1/seats/add     -d '{"event":"<e>","section":"A","row":"12","number":7,"tier":"STANDARD"}'  # -> {"seat":"<id>"}
+curl -s -H "$K" :8070/api/v1/pricing/set   -d '{"event":"<e>","tier":"STANDARD","amount":"49.50","currency":"USD"}'    # -> {"version":1}
+
+# NOTE the '{}' body. A path-parameter-only POST returns 500 "Type mismatch: expected Request, got
+# unknown" when sent with no body at all -- an empty JSON object is what makes it bind the path var.
+# Same for /api/v1/events/cancel/<e>.
+curl -s -H "$K" -X POST :8070/api/v1/events/open/<e> -d '{}'                                            # -> {"event":"<e>"}
+
+curl -s -H "$K" :8070/api/v1/booking/buy   -d '{"customer":"<uuid>","event":"<e>","seat":"<s>","tier":"STANDARD"}'
+#   -> {"booking":"<b>","ticket":"<t>","seat":"<s>","receipt":"<r>","amountMinor":4950,"currency":"USD"}
+curl -s :8070/api/v1/pricing/quote/<e>/STANDARD          # public -> {"amountMinor":4950,"currency":"USD","version":1}
+curl -s :8070/api/v1/availability/seats/<s>              # public -> {"state":"available"}
+                                                        #   NB: stays 'available' after a sale -- see the
+                                                        #   fact-delivery known issue above, not a doc error
+curl -s -H "$K" :8070/api/v1/booking/cancel -d '{"booking":"<b>","customer":"<uuid>"}'   # -> {"booking":"<b>","receipt":"<r>"}
 ```
 
 Each slice's exact route + error→status map: `src/main/resources/.../<usecase>/routes.toml`.
@@ -350,12 +491,41 @@ Each slice's exact route + error→status map: `src/main/resources/.../<usecase>
 - **Slices fail to deploy with `ClassNotFoundException`** referencing a class that clearly exists in
   `src/main/java` — stale `~/.m2` artifacts from a previous build of a different working-tree state.
   `mvn clean install -DskipTests` (or just re-run `./run-forge.sh`, which does this first) fixes it.
-- **Every route 404s despite a clean deploy** — see the "Known issue" callout above before assuming
-  your setup is wrong; as of this writing it reproduces on a fully correct setup too.
+- **Every route 404s despite a clean deploy** — you almost certainly re-ran Forge over an existing
+  `~/.aether/forge-data`. `rm -rf ~/.aether/forge-data` and start again; see "Re-running Forge" above.
+  Rebuilding the slice does **not** clear this — the stale state is the cluster's, not the build's.
+- **Some routes work and others 404 on the same cluster** — same cause. Check
+  `curl -s :8888/api/slices/status` for instances stuck in `LOADING`/`UNLOADING`; but note that a
+  fully `ACTIVE` slice can also have a missing route, so slice state alone does not settle it.
+- **401 `no security mode is configured`** — the call needs `-H "X-API-Key: local-dev-insecure-do-not-use"`, or
+  `aether.toml` is missing its `[app-http]` block. See "Authentication" above.
+- **500 `Type mismatch: expected Request, got unknown`** on `/events/open/<e>` or
+  `/events/cancel/<e>` — send `-d '{}'`. A path-parameter-only POST needs a body frame to bind.
 - **`aether.toml`'s `[database]` block missing, commented out, or pointing at the wrong
   `async_url`** — every `@PgSql` slice fails to provision its store. It ships enabled by default; see
   the "Run the cluster" section above and restore it to match `start-postgres.sh`'s connection
   string if it was changed.
+
+### Verifying all of this from a bare Linux image
+
+```bash
+./docker/verify-from-scratch.sh
+```
+
+Builds `ubuntu:24.04` + JDK 25 + Maven, starts PostgreSQL, performs Step 0, installs Forge, builds
+this project, boots the cluster and **asserts an HTTP status on every documented route**, ending
+with a purchase that must return a receipt and a no-credential call that must be refused. It prints
+`ALL CHECKS PASSED` or names the step that failed.
+
+It deliberately mounts **no `~/.m2` and no `~/.aether` from the host.** That is the entire point: on
+a developer machine this project's three unpublished dependencies are usually already installed, so
+a local build goes green whether or not the documented sequence is correct. Running from an empty
+image is what makes this README falsifiable — anything it omits fails here instead of being quietly
+supplied by the machine.
+
+The app container shares the PostgreSQL container's network namespace, so `localhost:5432`,
+`localhost:9100` and the app's own ports mean the same thing inside the container as they do on a
+laptop, and no configuration is rewritten for the container's benefit.
 
 ### Not covered here
 
@@ -388,7 +558,8 @@ Building the book's idiomatic patterns — and then the one-use-case-per-slice +
   parameter name with `configSection.replace('.', '_')` as the only sanitization, so a **hyphen**
   survived into an illegal Java identifier and javac failed *inside generated code*, with no
   diagnostic pointing at the slice. Fixed upstream in commit `311a1b0d7` (#561) on
-  `release-1.0.0-rc3`: `ResourceQualifierModel.variableSafeConfigSection()` now maps every code point
+  `release-1.0.0-rc3` (a branch that existed while the fix was in flight; the released artifact is the
+  tag `v1.0.0-rc3`): `ResourceQualifierModel.variableSafeConfigSection()` now maps every code point
   failing `Character.isJavaIdentifierPart` to `_`, and because that mapping is not injective (`a-b`
   and `a_b` collapse onto one name) the generator additionally de-collides issued names with a
   numeric suffix — three regression tests cover the hyphen, the separator collision, and the plain
