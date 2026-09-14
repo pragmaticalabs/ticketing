@@ -307,35 +307,37 @@ curl -s -o /dev/null -w "%{http_code}\n" localhost:8888   # -> 200 (dashboard)
 
 Then open the dashboard at **http://localhost:8888** to watch slice deployment and cluster health.
 
-### Authentication — required, and not optional for most of the API
+### Authentication — MANDATORY, and shipped disabled
 
-**13 of the 19 routed slices refuse every request until `aether.toml` declares a credential.** The
-six `public` read slices work without one; everything labelled `authenticated`, `role:admin` or
-`role:operator` answers:
+**`aether.toml`'s `[app-http]` block is required for the walkthrough, and it ships commented out.**
+You must enable it before anything below the six `public` read slices will answer. 13 of the 19
+routed slices declare `authenticated`, `role:admin` or `role:operator`, and until you enable the
+block every one of them returns:
 
 ```json
 {"status":401,"detail":"Route requires authentication but no security mode is configured"}
 ```
 
-That is not a misconfiguration on your side — it is what an embedded cluster does when no key map is
-supplied. Forge reads `[app-http]` from the sibling `aether.toml` and applies it **only when the key
-map is non-empty**, so a file without the block leaves every node on the deny-unless-public
-validator. The shipped `aether.toml` carries the block below; it exists so the walkthrough can run.
+The documented walkthrough starts with `POST /api/v1/events/create`, which is `role:admin` — so it
+**fails on its first step** until you do this. That is the shipped default behaving as intended, not
+a fault in your setup.
 
-```toml
-[app-http]
-security_mode = "api-key"
+**To enable it: open [`aether.toml`](aether.toml) and follow the instructions in the `[app-http]`
+block** — delete the leading `# ` from each line between its two `ENABLE` markers. Then pass the key
+on every non-public call:
 
-[app-http.api-keys.local-dev-insecure-do-not-use]
-name = "dev-admin"
-roles = ["admin", "operator", "user"]
-authorization_role = "ADMIN"
+```bash
+curl -H "X-API-Key: local-dev-insecure-do-not-use" ...
 ```
 
-Pass it as `-H "X-API-Key: local-dev-insecure-do-not-use"` on every non-public call. **This key is a local
-development credential and nothing else** — it is committed in plain text precisely so that it can
-never be mistaken for a secret. `ConfigLoader` reads `AETHER_API_KEYS` ahead of any TOML, so a real
-deployment supplies credentials by environment and never edits this file.
+That block is the authoritative description of the setting: what each field means, why a non-empty
+key map specifically is what activates it, and how to supply real credentials through
+`AETHER_API_KEYS` instead of editing the file. **It is deliberately not restated here** — a config
+snippet duplicated into prose drifts from the file, and the drifted copy is the one a reader
+follows.
+
+`docker/verify-from-scratch.sh` performs this same enabling step, so the instruction above is
+exercised on every verification run rather than merely asserted.
 
 ### ⚠️ Re-running Forge — delete `forge-data` first, or the cluster wedges
 

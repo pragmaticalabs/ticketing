@@ -63,6 +63,32 @@ docker exec "$APP" mkdir -p /work/ticketing
 docker cp /tmp/tkt-src.tar "$APP:/work/src.tar" >/dev/null
 docker exec "$APP" bash -c 'cd /work/ticketing && tar xf /work/src.tar' || fail "unpack sources"
 
+# Perform the documented [app-http] enabling step -- DELIBERATELY, and exactly as the README tells a
+# reader to do it by hand.
+#
+# `aether.toml` ships with [app-http] commented out, so without this the walkthrough 401s on its
+# first call. The temptation is to special-case that here, or to inject the key some other way. Do
+# NOT: this script's value is that it exercises the REAL documented path, so that a wrong or
+# incomplete instruction in the README shows up as a failing verification rather than as a reader's
+# problem months later. If the enabling step ever stops working, this run SHOULD go red.
+#
+# The sed is the mechanical equivalent of the human instruction ("delete the leading '# ' from each
+# line between the two ENABLE markers"): it strips the comment prefix inside the marked range and
+# leaves the marker lines themselves alone.
+log "3b/7 enable [app-http] -- the documented step, performed as documented"
+docker exec "$APP" bash -c \
+    'sed -i "/^# --- ENABLE BELOW ---$/,/^# --- ENABLE ABOVE ---$/{/^# --- ENABLE /!s/^# \?//}" /work/ticketing/aether.toml' \
+    || fail "enabling [app-http]"
+# Verify by CONTENT that the step actually landed. An unverified edit inside a container is exactly
+# the shape that reports success for work that never happened.
+docker exec "$APP" bash -c '
+    a=$(grep -c "^\[app-http\]$" /work/ticketing/aether.toml)
+    b=$(grep -c "^security_mode = " /work/ticketing/aether.toml)
+    c=$(grep -c "^\[app-http\.api-keys\." /work/ticketing/aether.toml)
+    echo "  [app-http]=$a security_mode=$b api-keys-table=$c (each must be 1)"
+    [ "$a" = "1" ] && [ "$b" = "1" ] && [ "$c" = "1" ]' \
+    || fail "the documented [app-http] step did not take effect -- the README instruction is wrong or stale"
+
 log "4/7 Step 0 -- build the three unpublished artifacts from the rc3 tag"
 docker exec "$APP" bash -c '
 set -e
