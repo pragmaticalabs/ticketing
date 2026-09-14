@@ -51,7 +51,6 @@ public record FakeGateway(boolean approved, Set<String> failUrls, List<String> c
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public <T> Promise<T> postJson(String url, Object body, Class<T> type) {
         calls.add(url);
         if (failUrls.contains(url)) {
@@ -65,7 +64,7 @@ public record FakeGateway(boolean approved, Set<String> failUrls, List<String> c
             default -> unused();
         };
 
-        return (Promise<T>) response;
+        return response.map(type::cast);
     }
 
     private String receiptId() {
