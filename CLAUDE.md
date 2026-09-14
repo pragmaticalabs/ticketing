@@ -198,13 +198,20 @@ jbct check src/main/java     # format + 41 lint rules (also: jbct format / jbct 
 ```
 
 - **Toolchain:** Java 25, Maven 3.9+. Pragmatica Lite / Aether / jbct artifacts are pinned to
-  **`1.0.0-rc3`** (the three `*.version` properties in `pom.xml`). **rc3 is NOT on Maven Central** —
-  it is a **local build of the `release-1.0.0-rc3` branch** of the pragmatica repo, so *every* rc3
-  artifact in `~/.m2` got there via `mvn install`. Central's newest published line is still rc2.
-  **Three of this project's dependencies have never been published on any rc line** and stay
-  local-install-only even once rc3 ships: **`resource-api`, `resource-notification`, and
-  `resource-interceptors`** (`mvn install` under `aether/resource`) — without them the project won't
-  resolve. The `jbct` CLI at `~/.jbct` is **1.0.0-rc3** (upgraded 2026-07-30; rc2 kept as
+  **`1.0.0-rc3`** (the three `*.version` properties in `pom.xml`). **The rc3 line IS on Maven
+  Central** — published 2026-09-02; `core`, `slice-api`, `jbct-maven-plugin` and most of the
+  `org.pragmatica-lite.aether:*` family all resolve from Central, so a blanket "build the monorepo
+  from source" step is **not** required. An earlier revision of this file said rc3 was unpublished
+  and that rc2 was Central's newest line; **both were wrong**, and the same claim was removed from
+  `README.md`.
+  What *is* missing is the **`resource-*` family**, which is unpublished at every version because
+  `aether/resource/pom.xml` sets `skipPublishing` in `<build><plugins>` rather than
+  `<pluginManagement>`, so every child inherits it
+  ([pragmaticalabs/pragmatica#1211](https://github.com/pragmaticalabs/pragmatica/issues/1211)).
+  This project compiles against three of them, and they must come from a local build. **The exact
+  artifact list and the verified build commands live in `README.md` "Step 0" — follow it there
+  rather than trusting a copy here**, which is how the contradiction above survived in the first
+  place. The `jbct` CLI at `~/.jbct` is **1.0.0-rc3** (upgraded 2026-07-30; rc2 kept as
   `jbct.jar.bak-rc2-2026-07-30` — note `jbct upgrade` checks a stale registry and can't self-update).
 - **Formatting covers `src/main/java` only.** The `jbct-maven-plugin` `format` goal binds to
   `process-sources`, which does not include test sources — **`src/test/java` is never auto-formatted
@@ -250,7 +257,8 @@ AETHER CONTEXT (you have no built-in Aether knowledge — follow exactly):
 - Keep all JBCT idioms unchanged (Result/Option/Promise, sealed Cause, factory naming, parse-don't-validate).
 - Files: <slice iface pkg/path>, <@PgSql store pkg/path>, routes.toml at <path>, migration at
   src/main/resources/schema/V0NN__<name>.sql. The @Query SQL must match that migration's columns.
-- Build OFFLINE: `mvn -o clean install` (the pinned version is not on Maven Central).
+- Build with `mvn clean install`. Most rc3 artifacts resolve from Maven Central; the `resource-*`
+  ones do not and must already be installed locally (README "Step 0"). Do NOT use `-o`.
 - DO NOT touch aether.toml or blueprint unless told.
 ```
 
@@ -263,8 +271,9 @@ AETHER CONTEXT (you have no built-in Aether knowledge — follow exactly):
   methodology and exact API signatures the **`../coding-technology/book/`** + **`/jbct` skill**
   (Core `1.0.0-rc1`) + real `org.pragmatica.lang.*` types are authoritative.
 - **Maven artifacts:** project pins **`1.0.0-rc3`** (the three `*.version` properties in `pom.xml`) —
-  **not on Maven Central; built locally from `release-1.0.0-rc3`**, and `resource-api` /
-  `resource-notification` / `resource-interceptors` were never published on any rc line. See §7.
+  **published on Maven Central** (the tag `v1.0.0-rc3`; there is no `release-1.0.0-rc3` branch on
+  origin any more), except the `resource-*` family — `resource-api` / `resource-notification` /
+  `resource-interceptors` among them — which is unpublished at every version. See §7.
 
 ---
 
