@@ -24,14 +24,14 @@ KEY="local-dev-insecure-do-not-use"
 log() { printf '\n=== %s ===\n' "$*"; }
 fail() { printf '\nFAILED: %s\n' "$*" >&2; exit 1; }
 
-log "0/7 cleanup any previous run"
+log "0/6 cleanup any previous run"
 docker rm -f "$PG" "$APP" >/dev/null 2>&1
 docker volume rm tkt-verify-m2 >/dev/null 2>&1
 
-log "1/7 build the bare toolchain image (ubuntu + JDK 25 + Maven)"
+log "1/6 build the bare toolchain image (ubuntu + JDK 25 + Maven)"
 docker build -t "$IMG" "$REPO_ROOT/docker" || fail "image build"
 
-log "2/7 start PostgreSQL 17"
+log "2/6 start PostgreSQL 17"
 docker run -d --name "$PG" -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=forge postgres:17 >/dev/null || fail "postgres start"
 for _ in $(seq 1 60); do docker exec "$PG" pg_isready -U postgres >/dev/null 2>&1 && break; sleep 1; done
 docker exec "$PG" pg_isready -U postgres || fail "postgres never became ready"
@@ -39,7 +39,7 @@ docker exec "$PG" pg_isready -U postgres || fail "postgres never became ready"
 # The app container SHARES the postgres container's network namespace. That is what lets
 # aether.toml's documented `localhost:5432`, the stub gateway's `localhost:9100` and the app's
 # own ports all resolve exactly as they do on a laptop, with no config rewriting.
-log "3/7 start the work container (shares the postgres network namespace)"
+log "3/6 start the work container (shares the postgres network namespace)"
 docker volume create tkt-verify-m2 >/dev/null
 docker run -d --name "$APP" --network "container:$PG" -v tkt-verify-m2:/root/.m2 \
     "$IMG" sleep infinity >/dev/null || fail "app container start"
@@ -75,7 +75,7 @@ docker exec "$APP" bash -c 'cd /work/ticketing && tar xf /work/src.tar' || fail 
 # The sed is the mechanical equivalent of the human instruction ("delete the leading '# ' from each
 # line between the two ENABLE markers"): it strips the comment prefix inside the marked range and
 # leaves the marker lines themselves alone.
-log "3b/7 enable [app-http] -- the documented step, performed as documented"
+log "3b/6 enable [app-http] -- the documented step, performed as documented"
 docker exec "$APP" bash -c \
     'sed -i "/^# --- ENABLE BELOW ---$/,/^# --- ENABLE ABOVE ---$/{/^# --- ENABLE /!s/^# \?//}" /work/ticketing/aether.toml' \
     || fail "enabling [app-http]"
@@ -89,19 +89,26 @@ docker exec "$APP" bash -c '
     [ "$a" = "1" ] && [ "$b" = "1" ] && [ "$c" = "1" ]' \
     || fail "the documented [app-http] step did not take effect -- the README instruction is wrong or stale"
 
-log "4/7 Step 0 -- build the three unpublished artifacts from the rc3 tag"
+# THERE IS NO SOURCE-BUILD STEP ANY MORE, AND ITS ABSENCE IS THE POINT.
+#
+# Until 2026-09-14 this script had to clone the pragmatica monorepo and `mvn install` three
+# artifacts that were unpublished at every version (#1211), because `aether/resource/pom.xml` set
+# `skipPublishing` in `<build><plugins>` rather than `<pluginManagement>`, so every child inherited
+# it. Those 15 artifacts are now on Maven Central and everything resolves from there.
+#
+# ASSERT THE LOCAL REPOSITORY IS EMPTY BEFORE BUILDING. This is the single assertion that makes the
+# whole run mean anything, and it is the check whose ABSENCE hid the defect for months: on the
+# machine where this was developed, `resource-api:1.0.0-rc3` had sat in ~/.m2 since 2026-09-01 --
+# ONE DAY BEFORE the rc3 Central publish -- so every local build resolved a locally-installed jar,
+# went green, and proved nothing about what a stranger would get. A clean-room check needs an empty
+# repository, ASSERTED empty, or it reports success while measuring the wrong thing.
+log "4/6 assert the local Maven repository is EMPTY (this is what makes the run a clean-room check)"
 docker exec "$APP" bash -c '
-set -e
-git clone --depth 1 --branch v1.0.0-rc3 https://github.com/pragmaticalabs/pragmatica.git /work/pragmatica >/dev/null 2>&1
-cd /work/pragmatica
-mvn -B install -DskipTests -Djbct.skip=true -pl jbct/jbct-maven-plugin,jbct/slice-processor,aether/pg-tools/pg-codegen -am > /work/p1.log 2>&1
-mvn -B install -DskipTests -Djbct.skip=true -pl aether/resource/api,aether/resource/notification,aether/resource/interceptors -am > /work/p2.log 2>&1
-for a in resource-api resource-notification resource-interceptors; do
-  ls /root/.m2/repository/org/pragmatica-lite/aether/$a/1.0.0-rc3/*.jar >/dev/null || { echo "MISSING $a"; exit 1; }
-done' || fail "Step 0 (see: docker exec $APP tail -40 /work/p2.log)"
-echo "three unpublished artifacts installed"
+n=$(find /root/.m2 -type f 2>/dev/null | wc -l)
+echo "  files in /root/.m2 before the build: $n (must be 0)"
+[ "$n" = "0" ]' || fail "local repository was NOT empty -- this run would prove nothing"
 
-log "5/7 install Forge from the published release archive, and build this project"
+log "5/6 install Forge from the published release archive, and build this project FROM CENTRAL"
 docker exec "$APP" bash -c '
 set -e
 curl -fsSL https://raw.githubusercontent.com/pragmaticalabs/pragmatica/main/install.sh | sh -s -- --version 1.0.0-rc3 > /work/install.log 2>&1
@@ -133,7 +140,7 @@ echo "aether-forge installed; ticketing built"
 # ---------------------------------------------------------------------------
 
 start_cluster() {
-  log "6/7 start the stub gateway and Forge (forge-data wiped first -- see README)"
+  log "6/6a start the stub gateway and Forge (forge-data wiped first -- see README)"
   docker exec -d "$APP" bash -c 'python3 /work/ticketing/scripts/stub-gateway.py > /work/gateway.log 2>&1'
   # forge-data must go before EVERY attempt, not just the first: a failed start
   # can leave state behind, and re-running Forge over it is #668's root cause.
@@ -154,7 +161,7 @@ start_cluster() {
 }
 
 run_walkthrough() {
-  log "7/7 drive the documented walkthrough and ASSERT each status"
+  log "7/6b drive the documented walkthrough and ASSERT each status"
   docker exec "$APP" bash -c '
   K="X-API-Key: '"$KEY"'"; J="Content-Type: application/json"; A=http://localhost:8070
   fails=0
