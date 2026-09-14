@@ -136,12 +136,15 @@ public interface CancelEvent {
             // JBCT pattern: Condition -- a present projection is the applied transition; an empty one is
             // the guard refusing, which only a follow-up read can explain.
             private Promise<Response> completeOrExplain(Option<RowId> cancelled, UUID event) {
-                return cancelled.map(_ -> cancelled(event))
+                return cancelled.map(_ -> Promise.success(cancelledResponse(event)))
                                 .or(() -> explainRefusal(event));
             }
 
-            private Promise<Response> cancelled(UUID event) {
-                return Promise.success(new Response(event.toString()));
+            /// The response for an event that is cancelled, whether this call performed the transition or
+            /// found it already satisfied. Returns the value rather than a `Promise` because it cannot
+            /// fail -- both callers supply their own success wrapping.
+            private Response cancelledResponse(UUID event) {
+                return new Response(event.toString());
             }
 
             private Promise<Response> explainRefusal(UUID event) {
@@ -157,7 +160,7 @@ public interface CancelEvent {
             // status means a concurrent change raced the diagnosis.
             private Promise<Response> refusalOutcome(EventStatus status, UUID event) {
                 return status == EventStatus.CANCELLED
-                       ? cancelled(event)
+                       ? Promise.success(cancelledResponse(event))
                        : CancelEventError.transitionRaced(status).promise();
             }
         }

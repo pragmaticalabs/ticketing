@@ -280,13 +280,16 @@ public interface CancelTicket {
             // and close -> publish SeatReleased.
             @Override
             public Promise<Response> execute(Request request) {
-                return ValidCancel.validCancel(request)
-                                  .async()
-                                  .flatMap(this::loadBooking)
-                                  .flatMap(this::ensureCancellable)
-                                  .flatMap(this::refund)
-                                  .flatMap(this::releaseAndClose)
-                                  .flatMap(this::publishReleased);
+                // Split at the refund boundary, which is the design's commit-relevant seam: nothing the
+                // customer holds is touched until money is back.
+                var refunded = ValidCancel.validCancel(request)
+                                          .async()
+                                          .flatMap(this::loadBooking)
+                                          .flatMap(this::ensureCancellable)
+                                          .flatMap(this::refund);
+
+                return refunded.flatMap(this::releaseAndClose)
+                               .flatMap(this::publishReleased);
             }
 
             private Promise<LoadedBooking> loadBooking(ValidCancel valid) {

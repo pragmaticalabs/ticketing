@@ -161,12 +161,8 @@ public interface OpenEvent {
             // JBCT pattern: Condition -- a present projection is the applied transition; an empty one is
             // the guard refusing, which only a follow-up read can explain.
             private Promise<Response> completeOrExplain(Option<RowId> opened, UUID event) {
-                return opened.map(_ -> opened(event))
+                return opened.map(_ -> Promise.success(new Response(event.toString())))
                              .or(() -> explainRefusal(event));
-            }
-
-            private Promise<Response> opened(UUID event) {
-                return Promise.success(new Response(event.toString()));
             }
 
             private Promise<Response> explainRefusal(UUID event) {

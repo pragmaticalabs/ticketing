@@ -384,13 +384,16 @@ public interface BuyTicket {
             // confirm steps so each owns its own inverse.
             @Override
             public Promise<Response> execute(Request request) {
-                return ValidBuy.validBuy(request)
-                               .async()
-                               .flatMap(this::ensureSellingAndEligible)
-                               .flatMap(this::priceBuy)
-                               .flatMap(this::reserve)
-                               .flatMap(this::authorize)
-                               .flatMap(this::confirm);
+                // Split where the saga stops reading and starts mutating: everything above is gating and
+                // pricing, everything below claims the seat and can require compensation.
+                var priced = ValidBuy.validBuy(request)
+                                     .async()
+                                     .flatMap(this::ensureSellingAndEligible)
+                                     .flatMap(this::priceBuy);
+
+                return priced.flatMap(this::reserve)
+                             .flatMap(this::authorize)
+                             .flatMap(this::confirm);
             }
 
             // JBCT pattern: Fork-Join -- the two synchronous cross-slice reads (sale status, seat
