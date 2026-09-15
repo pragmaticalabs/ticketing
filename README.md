@@ -239,7 +239,7 @@ three instances `ACTIVE` and `POST /api/v1/booking/buy` returning 404 — route 
 repaired once lost. Do not use slice state to conclude anything about route availability, in either
 direction.
 
-### ⚠️ Known issue — cross-slice facts are not delivered (verified symptom, cause unknown)
+### ⚠️ Known issue — cross-slice facts are not delivered (subscription cause identified; scheduling cause still unknown)
 
 **The pub-sub fact path does not work in this deployment.** After a **successful** purchase
 (`POST /api/v1/booking/buy` → 200 with a booking, ticket and receipt), the availability read model
@@ -262,8 +262,35 @@ What was checked and **excluded**: the `system:cluster-events` stream does log o
 rejected batches, but those are confined to that one system stream and its backfill completes
 (`applied 4 events, self CAUGHT_UP`). It is not the cause.
 
-**Root cause unknown.** This is a real defect and it is not the same thing as the `forge-data` issue
-above — it reproduces on a cleanly converged cluster. Tracked as
+**The two halves have different causes — the single-cause framing was wrong.** Subscription
+delivery and scheduled invocation share no dispatcher, executor, registry or lifecycle hook below
+the point where each reads its manifest. They are two independent defects, each on its own
+sufficient to produce total silence, which is exactly why they looked like one.
+
+**Subscriptions — a sufficient cause is identified.** A topic address is namespaced from the
+`groupId` and `artifactId` of whichever artifact is handed to the resolver, and the publisher and
+the subscriber each hand it *their own slice* artifact. Two co-deployed slices therefore never agree
+on an address:
+
+```
+BuyTicket publishes to  org.pragmatica.example.ticketing-buy-ticket:seat-sold:1.0.0
+ProjectSeatSold listens on  org.pragmatica.example.ticketing-project-seat-sold:seat-sold:1.0.0
+```
+
+Matching is exact string equality, so the publish finds no subscribers, **succeeds, and delivers
+nothing** — no error, no log line. Streams do not have this defect: they are namespaced from the
+blueprint. The fix is to namespace topics the same way.
+
+**But "sufficient" is not "operative".** That mechanism is proven — a unit test pointed at two
+distinct artifacts fails at the current release tip — but the proof bypasses the manifest read, and
+an empty manifest read would produce an *identical* symptom. Both could be true at once. Reading the
+cluster's KV store settles it: a subscription entry **present** under the subscriber's own namespace
+means the mismatch is the operative cause; **absent** means the manifest read returned nothing.
+
+**Scheduling — still unknown.** Three candidates remain, one of which logs nothing at all. Not
+guessed at here.
+
+This is not the `forge-data` issue above — it reproduces on a cleanly converged cluster. Tracked as
 [#1216](https://github.com/pragmaticalabs/pragmatica/issues/1216).
 
 ### Troubleshooting
